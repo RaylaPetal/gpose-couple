@@ -23,7 +23,7 @@ public sealed class SessionManager : IDisposable
     private readonly GposeActorRegistry registry;
     private readonly HavokPoseReader reader;
 
-    private long lastRefreshMs = long.MinValue / 2;
+    private readonly IntervalGate refreshGate = new(StatusRefreshMs);
     private bool wasGposing;
     private bool wasPosing;
     private ActorKey? lastPartner;
@@ -51,9 +51,8 @@ public sealed class SessionManager : IDisposable
     public void Tick()
     {
         var now = Environment.TickCount64;
-        if (now - lastRefreshMs >= StatusRefreshMs)
+        if (refreshGate.TryPass(now))
         {
-            lastRefreshMs = now;
             ktisis.Refresh();
             heels.Refresh();
             prerequisites.Refresh();

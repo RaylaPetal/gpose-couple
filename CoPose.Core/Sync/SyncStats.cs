@@ -47,8 +47,10 @@ public sealed class SyncStats
         LastErrorAtMs = nowMs;
     }
 
-    internal void Reset()
+    /// <summary>A new partner was chosen: receive stats start over, from their current tag if known.</summary>
+    internal void PartnerChosen(long? lastTagAtMs)
     {
-        LastPartnerTagAtMs = null;
+        Receives = 0;
+        LastPartnerTagAtMs = lastTagAtMs;
     }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using CoPose.Core;
 using CoPose.Core.Tags;
 using CoPose.Protocol;
 using Dalamud.Game.ClientState.Objects.SubKinds;
@@ -29,7 +30,7 @@ public sealed class HeelsTagChannel : ITagChannel, IDisposable
     private readonly ConcurrentQueue<(int Index, string Tag, string? Value)> events = new();
     private readonly Dictionary<ActorKey, string?> known = [];
     private readonly Queue<RemoteTag> inbox = new();
-    private long lastScanMs = long.MinValue / 2;
+    private readonly IntervalGate scanGate = new(ScanIntervalMs);
 
     public HeelsTagChannel(SimpleHeelsIpc heels, IObjectTable objects, IPluginLog log)
     {
@@ -100,12 +101,8 @@ public sealed class HeelsTagChannel : ITagChannel, IDisposable
                 RecordTest(owner, e.Value);
         }
 
-        var now = Environment.TickCount64;
-        if (now - lastScanMs >= ScanIntervalMs)
-        {
-            lastScanMs = now;
+        if (scanGate.TryPass(Environment.TickCount64))
             Scan();
-        }
     }
 
     private void Scan()

@@ -142,6 +142,30 @@ public class PairingTests
     }
 
     [Fact]
+    public void PartnerTags_AreCountedFromChoosing_NotOnlyOnceSessionStarts()
+    {
+        var p = new TwoPlayers();
+        p.Run(3);
+
+        Assert.True(p.A.Choose(KeyB));
+        Assert.NotNull(p.A.Stats.LastPartnerTagAtMs); // B's announcement was already known
+        Assert.Equal(0, p.A.Stats.Receives);
+
+        // While A waits (no session yet), B's tag changes: that must count.
+        p.Hub.Inject(KeyB, TagCodec.Encode(new TagState(ProtocolInfo.Version, KeyB, null, true, [], 0, [])));
+        p.Hub.Flush();
+        p.A.Tick();
+        Assert.Equal(1, p.A.Stats.Receives);
+        Assert.Null(p.A.Session);
+
+        Assert.True(p.B.Choose(KeyA));
+        p.Run(10);
+        Assert.Equal(PairingStatus.Paired, p.A.Status);
+        Assert.True(p.A.Stats.Receives >= 1);
+        Assert.NotNull(p.A.Stats.LastPartnerTagAtMs);
+    }
+
+    [Fact]
     public void Dispose_RemovesTag()
     {
         var p = new TwoPlayers();

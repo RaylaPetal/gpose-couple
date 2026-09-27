@@ -52,6 +52,13 @@ public sealed unsafe class HavokPoseReader(IObjectTable objects) : IPoseReader
             into.EnsureCapacity(count + length);
             for (var i = 0; i < length; i++)
             {
+                var parent = i < parents.Length ? parents[i] : (short)-1;
+
+                // Roots of face/hair/tail partials are placed by Ktisis re-attaching them to the body, not posed:
+                // they move whenever the parent body bone moves, and ApplyAbsolutePoses ignores them anyway.
+                if (p > 0 && parent < 0)
+                    continue;
+
                 var name = names[i];
                 if (!seen.Add(name))
                     continue;
@@ -60,7 +67,6 @@ public sealed unsafe class HavokPoseReader(IObjectTable objects) : IPoseReader
                 var position = new Vector3(qs.Translation.X, qs.Translation.Y, qs.Translation.Z);
                 var rotation = new Quaternion(qs.Rotation.X, qs.Rotation.Y, qs.Rotation.Z, qs.Rotation.W);
 
-                var parent = i < parents.Length ? parents[i] : (short)-1;
                 if (parent >= 0 && parent < length)
                 {
                     ref var pqs = ref model[parent];

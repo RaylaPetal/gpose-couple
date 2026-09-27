@@ -197,6 +197,8 @@ public class MainWindow : Window, IDisposable
         if (Session.Channel.LastError is { } channelError)
             ImGui.TextColored(Red, channelError);
 
+        DrawDetection();
+
         if (ImGui.Button("Log bones"))
             LogBones();
         ImGui.SameLine();
@@ -206,6 +208,48 @@ public class MainWindow : Window, IDisposable
             ImGui.TextWrapped(debugMessage);
 
         DrawChannelTest();
+    }
+
+    /// <summary>Which GPose actors CoPose sees, and why a session character is (or isn't) found.</summary>
+    private void DrawDetection()
+    {
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Character detection");
+
+        var keys = new List<ActorKey>();
+        if (Session.Self is { } self)
+            keys.Add(self);
+        if (Session.Client.Pairing.Chosen is { } partner)
+            keys.Add(partner);
+
+        var buffer = new PoseBuffer();
+        foreach (var key in keys)
+        {
+            var result = plugin.Registry.Explain(key, out var handle);
+            var (color, text) = result switch
+            {
+                Interop.ActorLookup.NotInGpose => (Grey, "not in GPose"),
+                Interop.ActorLookup.NoActorNamed => (Red, $"no GPose actor named \"{key.Name}\""),
+                _ when !plugin.Reader.TryRead(handle, buffer) => (Yellow, $"found at #{handle.ObjectIndex}, but no skeleton yet"),
+                _ => (Green, $"found at #{handle.ObjectIndex}, {buffer.Count} bones"),
+            };
+            ImGui.TextUnformatted($"{key}:");
+            ImGui.SameLine();
+            ImGui.TextColored(color, text);
+        }
+
+        if (ImGui.SmallButton("Rescan GPose actors"))
+            plugin.Registry.Invalidate();
+
+        var seen = plugin.Registry.LastScan;
+        if (seen.Count == 0)
+        {
+            ImGui.TextColored(Grey, Plugin.ClientState.IsGPosing ? "No scan yet (or no GPose actors)." : "Not in GPose.");
+            return;
+        }
+        ImGui.TextColored(Grey, $"GPose actors seen ({seen.Count}):");
+        foreach (var actor in seen)
+            ImGui.TextColored(Grey, $"  #{actor.Index}  {actor.Name}@{actor.World}");
     }
 
     /// <summary>Measures what the sync service carries: publish a test tag of a given size and watch the partner's list.</summary>

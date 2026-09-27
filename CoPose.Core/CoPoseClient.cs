@@ -37,7 +37,7 @@ public sealed class CoPoseClient : IDisposable
 
     private string? published;
     private string? pendingPublish;
-    private long? lastPublishAt;
+    private readonly IntervalGate publishGate;
     private (ActorKey? Chosen, bool Ready, int Resolved, int Revision)? lastFingerprint;
     private bool disposed;
 
@@ -53,6 +53,7 @@ public sealed class CoPoseClient : IDisposable
         this.clock = clock ?? SystemClock.Instance;
         this.options = options ?? CoPoseOptions.Default;
         Pairing = new Pairing(this.options.PartnerGraceMs);
+        publishGate = new IntervalGate(this.options.PublishIntervalMs);
     }
 
     public Pairing Pairing { get; }
@@ -85,7 +86,6 @@ public sealed class CoPoseClient : IDisposable
         if (paired && Session == null)
         {
             Session = new TagSync(me, Pairing.Chosen!.Value, registry, reader, writer, environment, Stats, options.SampleIntervalMs);
-            Stats.Reset();
             if (Pairing.ChosenPeer?.State is { } partnerState)
                 Session.OnPartnerTag(partnerState);
         }
@@ -99,7 +99,16 @@ public sealed class CoPoseClient : IDisposable
     }
 
     /// <summary>Chooses a partner, or accepts their request.</summary>
-    public bool Choose(ActorKey partner) => Pairing.Choose(partner);
+    public bool Choose(ActorKey partner)
+    {
+        if (!Pairing.Choose(partner))
+            return false;
+
+        // Receive stats describe the chosen partner; start from their tag if we already have one.
+        var peer = Pairing.ChosenPeer;
+        Stats.PartnerChosen(peer?.State != null ? peer.LastChangeMs : null);
+        return true;
+    }
 
     public void Stop()
     {
@@ -125,11 +134,12 @@ public sealed class CoPoseClient : IDisposable
             var status = TagCodec.TryDecode(tag.Value, out var state, out var otherVersion);
             Pairing.Observe(tag.Owner, status, state, otherVersion, now);
 
-            if (status == TagDecodeStatus.Ok && Session != null && tag.Owner == Session.Partner)
-            {
-                Stats.Received(now);
+            if (status != TagDecodeStatus.Ok || tag.Owner != Pairing.Chosen)
+                continue;
+
+            Stats.Received(now);
+            if (Session != null && tag.Owner == Session.Partner)
                 Session.OnPartnerTag(state!);
-            }
         }
     }
 
@@ -159,12 +169,12 @@ public sealed class CoPoseClient : IDisposable
     {
         if (value == published)
             return;
-        if (!force && lastPublishAt is { } last && now - last < options.PublishIntervalMs)
+        if (!force && !publishGate.IsOpen(now))
             return;
 
         channel.Publish(value);
         published = value;
-        lastPublishAt = now;
+        publishGate.Mark(now);
         if (value == null)
             return;
 
