@@ -36,6 +36,7 @@ internal sealed class FakeWorld : IActorRegistry, IPoseReader, IPoseWriter, ISyn
     private readonly Dictionary<ActorKey, (ActorHandle Handle, FakeSkeleton Skeleton)> actors = [];
 
     public bool CanSync { get; set; } = true;
+    public Func<Task<bool>>? ApplyResult { get; set; }
 
     public List<(ActorKey Actor, string[] Bones)> Applies { get; } = [];
 
@@ -80,6 +81,8 @@ internal sealed class FakeWorld : IActorRegistry, IPoseReader, IPoseWriter, ISyn
     {
         var skeleton = ByHandle(actor)!;
         Applies.Add((actors.First(a => a.Value.Handle == actor).Key, bones.Select(b => b.Name).ToArray()));
+        if (ApplyResult is { } result)
+            return result();
         foreach (var bone in bones)
         {
             var i = skeleton.IndexOf(bone.Name);

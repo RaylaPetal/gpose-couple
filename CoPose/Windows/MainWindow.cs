@@ -189,6 +189,8 @@ public class MainWindow : Window, IDisposable
 
         var stats = Session.Client.Stats;
         ImGui.TextUnformatted($"Tag publishes: {stats.Publishes}   last size: {stats.LastTagBytes / 1024.0:0.0} KB (budget {ProtocolInfo.TagBudgetBytes / 1024} KB)");
+        if (stats.LastTagBytes > ProtocolInfo.TagBudgetBytes)
+            ImGui.TextColored(Yellow, "Tag exceeds the size target; published, delivery unconfirmed.");
         var age = stats.LastPartnerTagAtMs is { } at ? $"{(Environment.TickCount64 - at) / 1000.0:0.0} s ago" : "never";
         ImGui.TextUnformatted($"Partner tags received: {stats.Receives}   last: {age}");
         ImGui.TextUnformatted($"Bones applied from partner: {stats.AppliedBones}   read + diff: {stats.SampleMs:0.000} ms");

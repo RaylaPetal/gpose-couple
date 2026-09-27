@@ -8,6 +8,73 @@ namespace CoPose.Tests.Sync;
 
 public class TagSyncTests
 {
+    [Theory]
+    [InlineData("false")]
+    [InlineData("throw")]
+    [InlineData("cancel")]
+    public void FailedPartnerPose_RetriesWithoutLeavingGpose(string failure)
+    {
+        var p = new TwoPlayers().Paired();
+        var before = p.B.Stats.AppliedBones;
+        p.WorldB.ApplyResult = () => failure switch
+        {
+            "throw" => throw new InvalidOperationException("Ktisis unavailable"),
+            "cancel" => Task.FromCanceled<bool>(new CancellationToken(true)),
+            _ => Task.FromResult(false),
+        };
+        p.WorldA.Pose(KeyB, 3, new(1, 2, 3));
+        Assert.True(p.A.PushPose(KeyB));
+        p.Run(20);
+
+        Assert.Equal(before, p.B.Stats.AppliedBones);
+        Assert.Contains("retrying", p.B.Stats.LastError);
+        var receives = p.B.Stats.Receives;
+        p.WorldB.ApplyResult = null;
+        p.Run(10);
+
+        Assert.True(p.B.Session!.Ready);
+        Assert.Equal(receives, p.B.Stats.Receives); // no new push or tag needed
+        Assert.Equal(new Vector3(1, 2, 3), p.WorldB.PositionOf(KeyB, 3));
+        Assert.True(p.B.Stats.AppliedBones > before);
+    }
+
+    [Fact]
+    public void FailedApply_IsRateLimited_AndNewerLocalEditWins()
+    {
+        var p = new TwoPlayers().Paired();
+        p.WorldB.ApplyResult = () => Task.FromResult(false);
+        var attempts = p.WorldB.Applies.Count;
+        p.WorldA.Pose(KeyB, 3, new(1, 2, 3));
+        p.Run(100, stepMs: 10);
+        Assert.InRange(p.WorldB.Applies.Count - attempts, 1, 2);
+
+        p.WorldB.Pose(KeyB, 3, new(4, 5, 6));
+        p.Run(10);
+        p.WorldB.ApplyResult = null;
+        p.Run(10);
+        Assert.Equal(new Vector3(4, 5, 6), p.WorldA.PositionOf(KeyB, 3));
+        AssertSame(p.WorldA, p.WorldB, KeyB);
+    }
+
+    [Fact]
+    public void ActorWrites_DoNotOverlap_WhenAnotherBoneArrives()
+    {
+        var p = new TwoPlayers().Paired();
+        var pending = new TaskCompletionSource<bool>();
+        p.WorldB.ApplyResult = () => pending.Task;
+        var attempts = p.WorldB.Applies.Count;
+        p.WorldA.Pose(KeyB, 3, new(1, 2, 3));
+        p.Run(10);
+        p.WorldA.Pose(KeyB, 4, new(4, 5, 6));
+        p.Run(10);
+        Assert.Equal(attempts + 1, p.WorldB.Applies.Count);
+
+        pending.SetResult(false);
+        p.WorldB.ApplyResult = null;
+        p.Run(10);
+        AssertSame(p.WorldA, p.WorldB, KeyB);
+    }
+
     private static void AssertSame(FakeWorld a, FakeWorld b, ActorKey key)
     {
         for (var i = 0; i < a[key].Values.Length; i++)

@@ -11,7 +11,8 @@ namespace CoPose.Core.Sync;
 /// </summary>
 public sealed class TagSync
 {
-    private sealed record PendingApply(ActorKey Key, ActorHandle Handle, LocalActor Local, int Version, Task<bool> Task, int[] Bones);
+    private sealed record PendingApply(ActorKey Key, ActorHandle Handle, LocalActor Local, int Version, Task<bool> Task, int[] Bones, BoneRegister[] Registers);
+    private const int ApplyRetryMs = 500;
 
     private readonly IActorRegistry registry;
     private readonly IPoseReader reader;
@@ -23,6 +24,7 @@ public sealed class TagSync
     private readonly Dictionary<ActorKey, LocalActor> locals = [];
     private readonly HashSet<(ActorKey Actor, string Bone)> dirty = [];
     private readonly List<PendingApply> applies = [];
+    private readonly Dictionary<ActorKey, long> retryAt = [];
     private readonly PoseBuffer buffer = new();
     private readonly List<int> changed = [];
 
@@ -97,6 +99,7 @@ public sealed class TagSync
             Ready = ready;
             locals.Clear();
             applies.Clear();
+            retryAt.Clear();
             if (ready)
             {
                 // The skeleton may have been reset while we were not syncing: re-apply the whole scene,
@@ -178,6 +181,9 @@ public sealed class TagSync
 
         foreach (var group in dirty.GroupBy(d => d.Actor).ToList())
         {
+            // The Ktisis writer rebuilds the whole actor, so never overlap writes on that actor.
+            if (applies.Any(a => a.Key == group.Key) || retryAt.GetValueOrDefault(group.Key) > now)
+                continue;
             if (!registry.TryResolve(group.Key, out var handle))
                 continue;
 
@@ -191,6 +197,7 @@ public sealed class TagSync
 
             var values = new List<BoneValue>();
             var indices = new List<int>();
+            var registers = new List<BoneRegister>();
             foreach (var (actor, bone) in group)
             {
                 if (!local.TryGetIndex(bone, out var i))
@@ -202,6 +209,7 @@ public sealed class TagSync
                     continue; // retry once the current apply lands
                 values.Add(new BoneValue(bone, register.Value));
                 indices.Add(i);
+                registers.Add(register);
                 dirty.Remove((actor, bone));
             }
             if (values.Count == 0)
@@ -209,8 +217,7 @@ public sealed class TagSync
 
             foreach (var i in indices)
                 local.InFlight[i]++;
-            applies.Add(new PendingApply(group.Key, handle, local, local.Version, Guard(() => writer.ApplyBonesAsync(handle, values)), indices.ToArray()));
-            stats.Applied(values.Count);
+            applies.Add(new PendingApply(group.Key, handle, local, local.Version, Guard(() => writer.ApplyBonesAsync(handle, values)), indices.ToArray(), registers.ToArray()));
         }
     }
 
@@ -226,8 +233,24 @@ public sealed class TagSync
             if (local.Version != apply.Version || !locals.TryGetValue(apply.Key, out var current) || !ReferenceEquals(current, local))
                 continue;
 
-            if (apply.Task.IsFaulted || !apply.Task.Result)
-                stats.Error($"Applying pose to {apply.Key} failed{(apply.Task.Exception is { } ex ? ": " + ex.InnerException?.Message : "")}", now);
+            var succeeded = apply.Task.IsCompletedSuccessfully && apply.Task.Result;
+            if (!succeeded)
+            {
+                stats.Error($"Applying pose to {apply.Key} failed; retrying{(apply.Task.Exception is { } ex ? ": " + ex.InnerException?.Message : "")}", now);
+                retryAt[apply.Key] = now + ApplyRetryMs;
+                for (var j = 0; j < apply.Bones.Length; j++)
+                {
+                    var bone = local.Names[apply.Bones[j]];
+                    // Do not resurrect a write superseded by a newer edit.
+                    if (Scene.TryGet(apply.Key, bone, out var currentRegister) && currentRegister.Version == apply.Registers[j].Version)
+                        dirty.Add((apply.Key, bone));
+                }
+            }
+            else
+            {
+                retryAt.Remove(apply.Key);
+                stats.Applied(apply.Bones.Length);
+            }
 
             foreach (var i in apply.Bones)
                 local.InFlight[i]--;

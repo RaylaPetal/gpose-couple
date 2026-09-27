@@ -14,7 +14,10 @@ What the source of the channel's two hops shows:
 - A heels change becomes `PlayerChanges.Heels`. `CacheCreationService.AddPlayerAddonPluginChangesToUpdate` restarts a **100 ms** timer, then the "addon plugin changes" fast path pushes to visible paired users.
 - On the receiving side, `PairHandler.HandleOptionalPluginDataAsync` applies heels data **with no GPose check**. The full character-data path is blocked in GPose (`PairHandler.cs:299`), but heels data goes through the fast path.
 - The fast path only applies once the pair has cached data (`_cachedData`), meaning the two players were synced normally before entering GPose. That's the usual case.
-- Lightless is a fork of the same client and is expected to behave the same. That's unverified.
+- **Correction (2026-09-27):** installed Lightless 3.3.0.0 does not have this separate receive path.
+  Its player reconciler blocks SimpleHeels application in GPose. CoPose 0.2.3 does not remove this
+  transport limitation or modify Lightless. A supported integration or upstream correction is needed.
+  See `verification.md`.
 
 Not yet known: how large a tag Player Sync's server accepts, and whether it throttles frequent addon updates. Task group 1 measures both before the rest is built.
 

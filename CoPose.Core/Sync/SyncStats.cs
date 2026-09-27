@@ -15,7 +15,7 @@ public sealed class SyncStats
     /// <summary>Clock time of the partner's last tag update, or null if none yet.</summary>
     public long? LastPartnerTagAtMs { get; private set; }
 
-    /// <summary>Bones applied from the partner's edits so far.</summary>
+    /// <summary>Bones in writes the pose writer has acknowledged successfully (not attempted writes).</summary>
     public long AppliedBones { get; private set; }
 
     /// <summary>Average time spent reading and diffing per sample, in milliseconds.</summary>

@@ -40,3 +40,8 @@
 
 - [ ] 6.1 Update the README (requirements: Player Sync/Lightless + SimpleHeels; how to pair; no networking section) and tag `v0.2.0`. Verify that CI publishes the release and `repo.json` shows 0.2.0.
 - [ ] 6.2 Two-player test via Player Sync: discovery, request/accept, pose partner, pose self, concurrent edits converge, pair mid-scene, Push pose, root move not synced, stop, and unload ends the session. Record results in `verification.md` in this change folder.
+
+## 7. Live-apply failure correction
+
+- [x] 7.1 Retain and rate-limit retries of failed or canceled Ktisis applies, serialize full actor writes, and count successful writer acknowledgements. Verify partner-character recovery without another push or GPose restart, local supersession and non-overlapping writes with automated tests.
+- [x] 7.2 Investigate the installed transport and document the Lightless 3.3.0.0 GPose limitation. Keep dependency replacement out of the CoPose release, as requested by the user.

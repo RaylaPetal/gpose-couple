@@ -179,8 +179,6 @@ public sealed class CoPoseClient : IDisposable
             return;
 
         Stats.Published(value.Length);
-        if (value.Length > ProtocolInfo.TagBudgetBytes)
-            Stats.Error($"Tag is {value.Length / 1024.0:0.0} KB, over the {ProtocolInfo.TagBudgetBytes / 1024} KB budget.", now);
     }
 
     /// <summary>Removes the local tag, which ends any session on the partner's side.</summary>

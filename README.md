@@ -14,6 +14,11 @@ the Player Sync or Lightless connection you already have.
 - **Player Sync or Lightless**, with the two of you **paired with each other** there.
 - The same CoPose version, and being near each other (same instance/area).
 
+**Lightless 3.3.0.0 compatibility:** its stock client defers SimpleHeels updates while in GPose.
+That prevents live CoPose updates even when pairing works, and can make the last pose appear after leaving
+and re-entering GPose. CoPose 0.2.3 fixes lost apply retries but does not remove this transport limitation.
+It does not modify or replace Lightless. Raising the tag budget does not fix the transport limitation.
+
 ## Install
 
 1. In game, open `/xlsettings` → **Experimental** → **Custom Plugin Repositories**.
