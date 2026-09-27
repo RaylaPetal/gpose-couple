@@ -60,6 +60,8 @@ public sealed class Plugin : IDalamudPlugin
             HelpMessage = "Toggle the CoPose window. /copose stop · stop posing together"
         });
 
+        // CoPose is used in GPose; Dalamud hides plugin UI there unless told not to.
+        PluginInterface.UiBuilder.DisableGposeUiHide = true;
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
         PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
         PluginInterface.UiBuilder.OpenConfigUi += ToggleMainUi;
