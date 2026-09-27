@@ -1,78 +1,61 @@
-> ⚠️ **Don't click Fork!**
-> 
-> This is a GitHub Template repo. If you want to use this for a plugin, [use this template][new-repo] to make a new repo!
->
-> ![image](https://github.com/goatcorp/SamplePlugin/assets/16760685/d9732094-e1ed-4769-a70b-58ed2b92580c)
+# CoPose
 
-# SamplePlugin
+Pose together in GPose. Two players pair up with an invite code, and either of them can pose **either** character
+with Ktisis. Bone edits are mirrored live on both clients.
 
-[![Use This Template badge](https://img.shields.io/badge/Use%20This%20Template-0?logo=github&labelColor=grey)][new-repo]
+> Early release (MVP). Syncs bone posing only: moving characters' root positions, soft locks, per-partner
+> permissions and auto-reconnect are not in this version.
 
+## Requirements
 
-Simple example plugin for Dalamud.
+- [Ktisis](https://github.com/ktisis-tools/Ktisis) with posing mode on, for both players.
+- Both players in the same instance/area, both in GPose.
+- Both players on the same CoPose version.
 
-This is not designed to be the simplest possible example, but it is also not designed to cover everything you might want to do. For more detailed questions, come ask in [the Discord](https://discord.gg/holdshift).
+## Install
 
-## Main Points
+1. In game, open `/xlsettings` → **Experimental** → **Custom Plugin Repositories**.
+2. Add `https://raw.githubusercontent.com/RaylaPetal/gpose-couple/master/repo.json`, tick **Enabled**, and save.
+3. Open `/xlplugins`, search for **CoPose**, and install it.
 
-* Simple functional plugin
-  * Slash command
-  * Main UI
-  * Settings UI
-  * Image loading
-  * Plugin json
-* Simple, slightly-improved plugin configuration handling
-* Project organization
-  * Copies all necessary plugin files to the output directory
-    * Does not copy dependencies that are provided by dalamud
-    * Output directory can be zipped directly and have exactly what is required
-  * Hides data files from visual studio to reduce clutter
-    * Also allows having data files in different paths than VS would usually allow if done in the IDE directly
+## Use
 
+1. **Host:** open `/copose`, click **Host**, and send your partner the invite code (`CP2-…`).
+2. **Partner:** paste the code in **Join a session** and click **Join** (or `/copose join <code>`).
+3. Both of you enter GPose and turn on Ktisis posing. When both show **Ready**, drag bones on either character.
 
-The intention is less that any of this is used directly in other projects, and more to show how similar things can be done.
+Commands: `/copose` (window), `/copose host`, `/copose join <invite>`, `/copose leave`.
 
-## How To Use
+### If your partner can't connect
 
-### Getting Started
+The host's PC has to be reachable. The host window shows what worked:
 
-To begin, [clone this template repository][new-repo] to your own GitHub account. This will automatically bring in everything you need to get a jumpstart on development. You do not need to fork this repository unless you intend to contribute modifications to it.
+- **Reachable from internet (UPnP):** nothing else to do.
+- **LAN/VPN only:** your router or ISP blocks incoming connections. Pick one:
+  - **Tunnel (only the host installs anything):** run a TCP tunnel such as [playit.gg](https://playit.gg) to local
+    port 47715, and paste its address (e.g. `name.gl.at.ply.gg:34567`) into **Public address** before clicking **Host**.
+  - **VPN:** both players install [Tailscale](https://tailscale.com), and the host puts their `100.x.y.z` address
+    in **Public address**.
+  - **Port-forward:** forward TCP 47715 on your router, and put your public IP in **Public address**.
 
-Be sure to also check out the [Dalamud Developer Docs][dalamud-docs] for helpful information about building your own plugin. The Developer Docs includes helpful information about all sorts of things, including [how to submit][submit] your newly-created plugin to the official repository. Assuming you use this template repository, the provided project build configuration and license are already chosen to make everything a breeze.
+If Windows Firewall asks about FINAL FANTASY XIV when you host, allow it.
 
-[new-repo]: https://github.com/new?template_name=SamplePlugin&template_owner=goatcorp
-[dalamud-docs]: https://dalamud.dev
-[submit]: https://dalamud.dev/plugin-publishing/submission
+## Build from source
 
-### Prerequisites
+Requires the .NET 10 SDK and a Dalamud dev install (XIVLauncher with Dalamud run at least once).
 
-SamplePlugin assumes all the following prerequisites are met:
+```
+dotnet build CoPose.slnx
+dotnet test --project CoPose.Tests/CoPose.Tests.csproj
+```
 
-* XIVLauncher, FINAL FANTASY XIV, and Dalamud have all been installed and the game has been run with Dalamud at least once.
-* XIVLauncher is installed to its default directories and configurations.
-  * If a custom path is required for Dalamud's dev directory, it must be set with the `DALAMUD_HOME` environment variable.
-* A .NET Core 8 SDK has been installed and configured, or is otherwise available. (In most cases, the IDE will take care of this.)
+Load `CoPose/bin/x64/Debug/CoPose.dll` as a dev plugin (`/xlsettings` → Experimental → Dev Plugin Locations).
 
-### Building
+## Releasing
 
-1. Open up `SamplePlugin.sln` in your C# editor of choice (likely [Visual Studio](https://visualstudio.microsoft.com) or [JetBrains Rider](https://www.jetbrains.com/rider/)).
-2. Build the solution. By default, this will build a `Debug` build, but you can switch to `Release` in your IDE.
-3. The resulting plugin can be found at `SamplePlugin/bin/x64/Debug/SamplePlugin.dll` (or `Release` if appropriate.)
+Push a version tag (`git tag v0.2.0 && git push origin v0.2.0`). The Release workflow builds, tests, publishes
+`latest.zip` as a GitHub release, and updates `repo.json` on `master`.
 
-### Activating in-game
+## License
 
-1. Launch the game and use `/xlsettings` in chat or `xlsettings` in the Dalamud Console to open up the Dalamud settings.
-    * In here, go to `Experimental`, and add the full path to the `SamplePlugin.dll` to the list of Dev Plugin Locations.
-2. Next, use `/xlplugins` (chat) or `xlplugins` (console) to open up the Plugin Installer.
-    * In here, go to `Dev Tools > Installed Dev Plugins`, and the `SamplePlugin` should be visible. Enable it.
-3. You should now be able to use `/pmycommand` (chat) or `pmycommand` (console)!
-
-Note that you only need to add it to the Dev Plugin Locations once (Step 1); it is preserved afterwards. You can disable, enable, or load your plugin on startup through the Plugin Installer.
-
-### Reconfiguring for your own uses
-
-Replace all references to `SamplePlugin` in all the files and filenames with your desired name, then start building the plugin of your dreams. You'll figure it out 😁
-
-Dalamud will load the JSON file (by default, `SamplePlugin/SamplePlugin.json`) next to your DLL and use it for metadata, including the description for your plugin in the Plugin Installer. Make sure to update this with information relevant to _your_ plugin!
-
-All participation in this repository is governed by our [Code of Conduct](https://dalamud.dev/code-of-conduct). If you used AI tooling at any point, review the [AI Usage Policy](https://dalamud.dev/plugin-publishing/ai-policy) and disclose your level of AI use. Entirely AI-generated submissions will be rejected, and undisclosed AI use may result in a ban.
+AGPL-3.0. See [LICENSE.md](LICENSE.md).

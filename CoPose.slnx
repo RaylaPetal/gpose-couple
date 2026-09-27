@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="CoPose/CoPose.csproj">
+    <Platform Project="x64" />
+  </Project>
+  <Project Path="CoPose.Protocol/CoPose.Protocol.csproj" />
+  <Project Path="CoPose.Core/CoPose.Core.csproj" />
+  <Project Path="CoPose.Tests/CoPose.Tests.csproj" />
+</Solution>

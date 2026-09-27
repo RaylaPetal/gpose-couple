@@ -1,0 +1,81 @@
+name: Release
+
+# Push a tag like v0.1.0 to build, test, publish a GitHub release with latest.zip,
+# and update repo.json on master (the Dalamud custom repository manifest).
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write
+
+jobs:
+
+  release:
+    runs-on: windows-2022
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 0
+
+    - name: Install .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Download Dalamud
+      run: |
+        Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile "$env:RUNNER_TEMP\dalamud.zip"
+        Expand-Archive -Force "$env:RUNNER_TEMP\dalamud.zip" "$env:AppData\XIVLauncher\addon\Hooks\dev"
+
+    - name: Determine version
+      id: version
+      run: |
+        $tag = "${{ github.ref_name }}"
+        $version = $tag.TrimStart('v')
+        if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') { throw "Tag '$tag' is not a version like v1.2.3" }
+        if ($version.Split('.').Count -eq 3) { $version = "$version.0" }
+        "version=$version" >> $env:GITHUB_OUTPUT
+
+    - name: Build
+      run: dotnet build CoPose.slnx --configuration Release -p:Version=${{ steps.version.outputs.version }}
+
+    - name: Test
+      run: dotnet test --project CoPose.Tests/CoPose.Tests.csproj --configuration Release --no-build
+
+    - name: Create GitHub release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: >
+        gh release create "${{ github.ref_name }}" ".\CoPose\bin\x64\Release\CoPose\latest.zip"
+        --title "CoPose ${{ github.ref_name }}" --generate-notes
+
+    - name: Update repo.json on master
+      run: |
+        $manifest = Get-Content .\CoPose\bin\x64\Release\CoPose\CoPose.json -Raw | ConvertFrom-Json
+        $download = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/latest.zip"
+        $extra = [ordered]@{
+          RepoUrl             = "https://github.com/${{ github.repository }}"
+          DownloadLinkInstall = $download
+          DownloadLinkTesting = $download
+          DownloadLinkUpdate  = $download
+          IsHide              = $false
+          IsTestingExclusive  = $false
+          LastUpdate          = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        }
+        foreach ($key in $extra.Keys) { $manifest | Add-Member -NotePropertyName $key -NotePropertyValue $extra[$key] -Force }
+        $json = ConvertTo-Json -InputObject @($manifest) -Depth 5
+
+        git fetch origin master
+        git checkout -B master origin/master
+        Set-Content -Path repo.json -Value $json -Encoding utf8NoBOM
+
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add repo.json
+        git diff --cached --quiet
+        if ($LASTEXITCODE -eq 0) { Write-Host "repo.json unchanged"; exit 0 }
+        git commit -m "Update repo.json for ${{ github.ref_name }}"
+        git push origin master
