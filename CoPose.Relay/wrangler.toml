@@ -1,0 +1,30 @@
+name = "copose-relay"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# CoPose session relay: one Durable Object per two-player room (see openspec/changes/live-relay-and-reset/design.md).
+# The base config is never deployed directly; always pass --env. No account id or secrets live here:
+# wrangler deploys to the logged-in account. Independent of any other Worker on the account.
+
+[env.local]
+vars = { RELAY_ENVIRONMENT = "local" }
+
+[[env.local.durable_objects.bindings]]
+name = "POSE_ROOM"
+class_name = "PoseRoom"
+
+[env.production]
+vars = { RELAY_ENVIRONMENT = "production" }
+
+[[env.production.durable_objects.bindings]]
+name = "POSE_ROOM"
+class_name = "PoseRoom"
+
+[env.production.observability.logs]
+enabled = true
+head_sampling_rate = 1
+
+# SQLite-backed Durable Objects are what the Workers free plan supports.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PoseRoom"]

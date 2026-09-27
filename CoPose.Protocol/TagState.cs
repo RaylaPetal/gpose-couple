@@ -3,23 +3,18 @@ using MessagePack;
 namespace CoPose.Protocol;
 
 /// <summary>
-/// Everything a CoPose client publishes in its SimpleHeels tag.
-/// <para>
-/// <see cref="Actors"/> holds only the bone values <em>this client authored</em> (its latest edits), each with the
-/// logical clock it was made at; the author is always <see cref="Self"/>. Receivers merge it into their own state,
-/// keeping whichever version is newer per bone, so a tag is a complete statement of the owner's edits and a missed,
-/// repeated or reordered tag update never loses anything.
-/// </para>
+/// Everything a CoPose client publishes in its SimpleHeels tag: pairing only. Pose data travels over the relay,
+/// because sync services defer tag updates while the receiver is in GPose.
 /// </summary>
 [MessagePackObject]
 public sealed record TagState(
     [property: Key(0)] int Version,
     [property: Key(1)] ActorKey Self,
     [property: Key(2)] ActorKey? Partner,
-    [property: Key(3)] bool Ready,
-    [property: Key(4)] ActorKey[] Resolved,
-    [property: Key(5)] uint Clock,
-    [property: Key(6)] TagActor[] Actors);
+    [property: Key(3)] byte[] Nonce)
+{
+    public const int NonceLength = 16;
+}
 
 /// <summary>
 /// Authored bones of one actor. <see cref="Values"/> has 10 floats per bone: position (x, y, z),

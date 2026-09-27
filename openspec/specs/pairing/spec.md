@@ -5,74 +5,6 @@ Client-side pairing for the CoPose plugin. One player hosts a session from insid
 
 ## Requirements
 
-### Requirement: Host port configuration
-The plugin SHALL let the user set the TCP port used for hosting and SHALL persist it in the plugin configuration. The default SHALL be 47715.
-
-#### Scenario: Port persisted
-- **WHEN** the user changes the host port and reloads the plugin
-- **THEN** the changed port is still set
-
-### Requirement: Host, join and leave
-The plugin SHALL let the user host a session, join a session by pasting an invite code, and leave the current session, through the main window and through the `/copose host`, `/copose join <invite>` and `/copose leave` commands. `/copose` with no arguments SHALL toggle the main window. Only one session at a time SHALL be allowed, whether hosting or joined.
-
-#### Scenario: Host
-- **WHEN** the user clicks "Host"
-- **THEN** the window shows the invite code with a copy button and lists the user as the only participant
-
-#### Scenario: Join by command
-- **WHEN** the user types `/copose join CP1-…` with a valid invite for a reachable host
-- **THEN** the plugin connects and the window lists both participants
-
-#### Scenario: Try each address
-- **WHEN** an invite contains several endpoints
-- **THEN** the plugin tries them in the invite's order (LAN first), each with a 3-second timeout, and uses the first that succeeds
-
-#### Scenario: Host unreachable
-- **WHEN** none of the invite's addresses accept a connection
-- **THEN** the window shows "could not reach host", with a hint that the host may need UPnP, a port-forward, or a shared LAN/VPN
-
-#### Scenario: Join rejected
-- **WHEN** the host rejects the join (invalid invite, session full, or version mismatch)
-- **THEN** the window shows the rejection reason
-
-#### Scenario: Leave
-- **WHEN** the user clicks "Leave" or types `/copose leave`
-- **THEN** the plugin leaves the session (or stops hosting), stops all sending and applying of pose data, and clears all session state
-
-### Requirement: Router reachability for the host
-When hosting starts, the plugin SHALL try to map the host port on the local router with UPnP or NAT-PMP, and SHALL learn the public IPv4 address from the router. The window SHALL show the result as one of: "reachable from internet (UPnP)", "LAN/VPN only" (mapping failed, or the router reports a private or carrier-grade-NAT address), or "mapping in progress". When the mapping fails, the window SHALL tell the user to forward the port manually or use a shared LAN/VPN. It SHALL let the user enter a public address as `address` or `address:port`, where the address is an IPv4 address or a host name (for example a Tailscale IP, a manual port-forward, or a tunnel such as playit.gg or bore). The port defaults to the host port. The plugin SHALL resolve a host name to IPv4 when hosting starts, and SHALL always include the resulting endpoint in the invite, whatever the UPnP result. If it can't be parsed or resolved, the window SHALL show why. The mapping SHALL be removed when hosting stops or the plugin unloads.
-
-#### Scenario: UPnP success
-- **WHEN** the router supports UPnP and the mapping succeeds
-- **THEN** the status shows "reachable from internet (UPnP)" and the invite includes the router's public address
-
-#### Scenario: UPnP unavailable
-- **WHEN** no UPnP/NAT-PMP router responds within 5 seconds
-- **THEN** the status shows "LAN/VPN only" with port-forward guidance, and the invite contains only the LAN endpoint (plus a user-entered public address, if set)
-
-#### Scenario: Carrier-grade NAT detected
-- **WHEN** the router reports a public address in a private or `100.64.0.0/10` range
-- **THEN** the status shows "LAN/VPN only", explaining that the ISP's NAT blocks direct connections, and that address is not put in the invite
-
-#### Scenario: Tunnel address
-- **WHEN** the host enters `name.gl.at.ply.gg:34567` as the public address and starts hosting
-- **THEN** the name is resolved to an IPv4 address, and the invite contains that address with port 34567 alongside the LAN endpoint on the host port
-
-#### Scenario: Unresolvable public address
-- **WHEN** the entered public address is malformed or its host name doesn't resolve
-- **THEN** hosting still starts, the window shows the error, and the invite contains only the other endpoints
-
-#### Scenario: Mapping removed
-- **WHEN** the host stops hosting
-- **THEN** the UPnP port mapping the plugin created is deleted
-
-### Requirement: Participant identity
-Each participant SHALL be identified on the wire by an actor key made of their character name and home world id. GPose object indices SHALL NOT be sent over the network. The client id SHALL be a random identifier generated each time the plugin loads.
-
-#### Scenario: Hello contents
-- **WHEN** the plugin joins a session
-- **THEN** its hello carries the local player's name and home world id, a client id, a display name and the session secret, and no object index
-
 ### Requirement: Local actor resolution
 The plugin SHALL resolve each participant's actor key to a local GPose actor by matching name and home world among the GPose actors on this client. It SHALL re-resolve when entering GPose, when the participant list changes, and when a lookup fails. An actor that can't be resolved SHALL be shown as "absent", and pose data for it SHALL be dropped.
 
@@ -85,15 +17,15 @@ The plugin SHALL resolve each participant's actor key to a local GPose actor by 
 - **THEN** the partner's actor is shown as absent, and incoming pose data for it is discarded without error
 
 ### Requirement: Readiness and presence
-A participant SHALL be ready when they're in GPose, Ktisis reports posing is on, and every participant's actor key resolves locally. The plugin SHALL broadcast its presence (ready flag and resolved actor keys) when it joins, when a participant joins, and whenever its readiness changes. The window SHALL show each participant's ready state.
+A participant SHALL be ready when they're in GPose, Ktisis reports posing is on, and both participants' actor keys resolve locally. The plugin SHALL publish its ready flag and resolved actor keys in its tag whenever they change. The window SHALL show each participant's ready state.
 
 #### Scenario: Becoming ready
 - **WHEN** a user in a session enters GPose and turns Ktisis posing on, and both actors resolve
-- **THEN** the partner's window shows that user as ready
+- **THEN** the partner's window shows that user as ready within a few seconds
 
 #### Scenario: Posing turned off
 - **WHEN** a ready user turns Ktisis posing off
-- **THEN** the partner's window shows that user as not ready
+- **THEN** the partner's window shows that user as not ready within a few seconds
 
 ### Requirement: Ktisis availability check
 On load and whenever it tries to become ready, the plugin SHALL check that Ktisis is installed and exposes IPC API major version 1. If Ktisis is missing or incompatible, the plugin SHALL show that in the window and SHALL never report ready.
@@ -102,9 +34,57 @@ On load and whenever it tries to become ready, the plugin SHALL check that Ktisi
 - **WHEN** Ktisis is not installed or not loaded
 - **THEN** the window shows "Ktisis not available" and the user is never marked ready
 
-### Requirement: Clean shutdown
-When the plugin is unloaded or disposed, it SHALL leave or stop any session, close all sockets, remove any UPnP mapping it created, and unregister all commands, UI and framework handlers.
+### Requirement: Sync service prerequisites
+The plugin SHALL check that SimpleHeels is loaded and exposes its tag IPC (API major version 2), and that a sync service that carries SimpleHeels data (Player Sync or Lightless) is installed and loaded. The window SHALL show what's missing and explain that both players must be paired with each other in that service. While SimpleHeels is unavailable, the plugin SHALL NOT offer pairing.
 
-#### Scenario: Unload while hosting
-- **WHEN** the host disables the plugin while a guest is connected
-- **THEN** the guest sees the session ended, the port mapping is removed, and no background work keeps running
+#### Scenario: SimpleHeels missing
+- **WHEN** SimpleHeels is not installed or not loaded
+- **THEN** the window says SimpleHeels is required and no partners are listed
+
+#### Scenario: No sync service
+- **WHEN** SimpleHeels is loaded but neither Player Sync nor Lightless is loaded
+- **THEN** the window warns that a sync service is required for the partner to receive anything
+
+### Requirement: Partner discovery
+The plugin SHALL publish a `CoPose` SimpleHeels tag on the local player's character (object index 0) while the plugin is loaded and SimpleHeels is available, announcing its protocol version even when not paired. It SHALL list nearby player characters whose `CoPose` tag has the same protocol version as possible partners. Players with an incompatible version SHALL be listed as needing an update.
+
+#### Scenario: Partner appears
+- **WHEN** a player paired with me in the sync service, near me, and running CoPose is present
+- **THEN** that player appears in my window's list of possible partners within a few seconds
+
+#### Scenario: Version mismatch
+- **WHEN** a nearby player's `CoPose` tag has a different protocol version
+- **THEN** they are listed as "needs the same CoPose version" and can't be chosen
+
+### Requirement: Mutual pairing
+The user SHALL be able to choose one listed player as their partner ("Pose with <name>") and to stop ("Stop posing together"). The choice SHALL be published in the tag. A session SHALL exist exactly when both players have chosen each other. When another player has chosen me but I haven't chosen them, the window SHALL show a request I can accept. Only one partner at a time SHALL be allowed. Choosing a player SHALL count as consent for them to pose my character during the session.
+
+#### Scenario: Request and accept
+- **WHEN** A clicks "Pose with B" and B then clicks "Accept" on A's request
+- **THEN** both windows show that A and B are posing together
+
+#### Scenario: One-sided choice
+- **WHEN** A has chosen B but B has not chosen A
+- **THEN** A's window shows "Waiting for B", B's window shows A's request, and no pose data is applied on either side
+
+#### Scenario: Stop
+- **WHEN** either player clicks "Stop posing together"
+- **THEN** both clients leave the session within a few seconds, stop applying each other's pose data, and clear session state
+
+#### Scenario: Partner goes away
+- **WHEN** the partner's `CoPose` tag disappears (they unload the plugin, leave the area, or unpair in the sync service)
+- **THEN** the session ends on my side and the window says the partner is gone
+
+### Requirement: Participant identity in tags
+Each participant SHALL be identified in tag data by an actor key made of their character name and home world id. GPose object indices SHALL NOT be written into tags. Tag data from a player SHALL be attributed to the overworld character SimpleHeels reports it on.
+
+#### Scenario: Tag contents
+- **WHEN** the plugin publishes its tag
+- **THEN** the tag carries the local player's actor key and, when paired, the partner's actor key, and no object index
+
+### Requirement: Clean shutdown and tag removal
+When the plugin is unloaded or disposed, it SHALL remove its `CoPose` tag from the local player's character, and unregister all IPC subscriptions, commands, UI and framework handlers.
+
+#### Scenario: Unload while posing together
+- **WHEN** a player disables the plugin during a session
+- **THEN** their `CoPose` tag is removed, the partner's session ends, and no background work keeps running

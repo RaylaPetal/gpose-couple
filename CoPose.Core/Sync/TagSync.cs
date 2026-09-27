@@ -27,6 +27,8 @@ public sealed class TagSync
     private readonly Dictionary<ActorKey, long> retryAt = [];
     private readonly PoseBuffer buffer = new();
     private readonly List<int> changed = [];
+    private readonly HashSet<(ActorKey Actor, string Bone)> pendingLive = [];
+    private readonly Dictionary<ActorKey, (string[] Names, BoneSample[] Samples)> startPoses = [];
 
     private long nextSampleAt;
     private bool needsSeed;
@@ -58,10 +60,51 @@ public sealed class TagSync
 
     private ActorKey[] Keys => [Self, Partner];
 
-    /// <summary>Merges the partner's authored edits; changed bones are applied on the next ready tick.</summary>
-    public void OnPartnerTag(TagState state)
+    /// <summary>Local edits recorded since the last send.</summary>
+    public bool HasPendingLive => pendingLive.Count > 0;
+
+    /// <summary>Set when the partner should get a full state now (readiness changed, seed, Push pose, Reset).</summary>
+    public bool FullRequested { get; private set; }
+
+    /// <summary>Characters whose starting pose was captured when this client last became ready.</summary>
+    public IReadOnlyCollection<ActorKey> StartPoses => startPoses.Keys;
+
+    /// <summary>Returns and clears the local edits since the last send, as tag data.</summary>
+    public TagActor[] TakeLiveDelta()
     {
-        foreach (var change in Scene.Merge(Partner, state.Actors))
+        var delta = Scene.ExportAuthored(Self, pendingLive);
+        pendingLive.Clear();
+        return delta;
+    }
+
+    /// <summary>Returns every bone this client authored and clears pending live edits (a full state covers them).</summary>
+    public TagActor[] TakeFull()
+    {
+        FullRequested = false;
+        pendingLive.Clear();
+        return Scene.ExportAuthored(Self);
+    }
+
+    /// <summary>Records the character's starting pose as new edits, so it returns to it on both clients.</summary>
+    public bool Reset(ActorKey actor)
+    {
+        if (!Ready || !startPoses.TryGetValue(actor, out var start))
+            return false;
+
+        var version = Scene.NextVersion(Self);
+        for (var i = 0; i < start.Names.Length; i++)
+        {
+            Scene.Record(actor, start.Names[i], start.Samples[i], version);
+            dirty.Add((actor, start.Names[i])); // apply locally too
+        }
+        FullRequested = true;
+        return true;
+    }
+
+    /// <summary>Merges the partner's authored edits; changed bones are applied on the next ready tick.</summary>
+    public void OnPartnerState(IReadOnlyList<TagActor> actors)
+    {
+        foreach (var change in Scene.Merge(Partner, actors))
             dirty.Add((change.Actor, change.Bone));
     }
 
@@ -84,6 +127,7 @@ public sealed class TagSync
             local.Committed[i] = buffer.Samples[i];
             dirty.Remove((actor, buffer.Names[i]));
         }
+        FullRequested = true;
         return true;
     }
 
@@ -100,8 +144,10 @@ public sealed class TagSync
             locals.Clear();
             applies.Clear();
             retryAt.Clear();
+            FullRequested = true; // the partner shows our ready state
             if (ready)
             {
+                startPoses.Clear();
                 // The skeleton may have been reset while we were not syncing: re-apply the whole scene,
                 // then stamp any of our own bones nobody has set yet.
                 foreach (var actor in Scene.Actors)
@@ -139,6 +185,7 @@ public sealed class TagSync
             {
                 // First sight (or the skeleton changed): take it as the baseline without recording edits.
                 local.Rebuild(buffer);
+                startPoses.TryAdd(key, (local.Names.ToArray(), local.Committed.ToArray()));
                 if (key == Self && needsSeed)
                     Seed(local);
                 continue;
@@ -155,6 +202,7 @@ public sealed class TagSync
                 local.Committed[i] = buffer.Samples[i];
                 Scene.Record(key, local.Names[i], buffer.Samples[i], version);
                 dirty.Remove((key, local.Names[i]));
+                pendingLive.Add((key, local.Names[i]));
             }
         }
         stats.SampleTook(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
@@ -172,6 +220,8 @@ public sealed class TagSync
             version ??= Scene.NextVersion(Self);
             Scene.Record(Self, local.Names[i], local.Committed[i], version.Value);
         }
+        if (version != null)
+            FullRequested = true;
     }
 
     private void ApplyDirty(long now)

@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.2.3.0</Version>
+    <Version>0.3.0.0</Version>
     <!-- Manifest fields (see https://github.com/goatcorp/DalamudPackager/blob/827d88dc/DalamudPackager/DalamudPackager.cs#L420) -->
     <Author>Rayla Petal</Author>
     <Name>CoPose</Name>
     <Punchline>Pose together in GPose: either player can pose either character.</Punchline>
     <Description>Shared-control GPose scenes for Ktisis. Pair with someone nearby through Player Sync or Lightless (via SimpleHeels tags);
-bone edits made by either player on either character reach the other about a second later. Requires Ktisis and SimpleHeels.</Description>
+bone edits made by either player on either character show up live on both screens in GPose. Requires Ktisis and SimpleHeels.</Description>
     <RepoUrl>https://github.com/RaylaPetal/gpose-couple</RepoUrl>
     <Tags>gpose;ktisis;posing;sync</Tags>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

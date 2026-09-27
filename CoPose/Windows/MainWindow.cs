@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using CoPose.Core.Relay;
 using CoPose.Core.Sync;
 using CoPose.Core.Tags;
 using CoPose.Protocol;
@@ -110,6 +111,9 @@ public class MainWindow : Window, IDisposable
 
     private void DrawIdle(ActorKey me, Pairing pairing)
     {
+        if (Plugin.ClientState.IsGPosing)
+            ImGui.TextColored(Yellow, "Pair before entering GPose: sync services hold back pairing updates while you are in GPose.");
+
         foreach (var request in pairing.Requests(me).ToList())
         {
             ImGui.TextColored(Green, $"{request.Key.Name} wants to pose with you.");
@@ -156,12 +160,12 @@ public class MainWindow : Window, IDisposable
         if (client.Session is not { } session)
             return;
 
-        ImGui.TextColored(Grey, "Your changes reach your partner about a second after you make them.");
+        DrawRelayStatus(client.Relay, client.PartnerPresent, partner.Key.Name);
         ImGui.Spacing();
 
         StatusText(session.Ready, "You: ready", "You: not ready");
         ImGui.SameLine();
-        StatusText(partner.State?.Ready == true, $"{partner.Key.Name}: ready", $"{partner.Key.Name}: not ready");
+        StatusText(client.PartnerReady, $"{partner.Key.Name}: ready", $"{partner.Key.Name}: not ready");
         if (!session.Ready)
             ImGui.TextWrapped("To sync, enter GPose near your partner and turn on Ktisis posing.");
 
@@ -176,9 +180,38 @@ public class MainWindow : Window, IDisposable
             using (ImRaii.Disabled(!session.Ready || !resolved))
             {
                 ImGui.SameLine();
+                if (ImGui.SmallButton($"Reset##{key}"))
+                    Session.Reset(key);
+                ImGui.SameLine();
                 if (ImGui.SmallButton($"Push pose##{key}"))
                     Session.PushPose(key);
             }
+        }
+
+        using (ImRaii.Disabled(!session.Ready))
+        {
+            if (ImGui.Button("Reset both"))
+                Session.ResetBoth();
+        }
+        ImGui.TextColored(Grey, "Reset returns a character to the pose it had when you became ready. Sync is automatic; Push pose is only an override.");
+    }
+
+    private static void DrawRelayStatus(ISceneChannel relay, bool partnerPresent, string partnerName)
+    {
+        switch (relay.Status)
+        {
+            case RelayStatus.Connected:
+                ImGui.TextColored(Green, partnerPresent ? "Live sync connected." : $"Relay connected, waiting for {partnerName}...");
+                break;
+            case RelayStatus.Connecting:
+                ImGui.TextColored(Yellow, "Connecting to the relay...");
+                break;
+            case RelayStatus.Unreachable:
+                ImGui.TextColored(Red, $"Relay unreachable, retrying: {relay.LastError}");
+                break;
+            default:
+                ImGui.TextColored(Grey, "Relay idle.");
+                break;
         }
     }
 
@@ -188,17 +221,18 @@ public class MainWindow : Window, IDisposable
             return;
 
         var stats = Session.Client.Stats;
-        ImGui.TextUnformatted($"Tag publishes: {stats.Publishes}   last size: {stats.LastTagBytes / 1024.0:0.0} KB (budget {ProtocolInfo.TagBudgetBytes / 1024} KB)");
-        if (stats.LastTagBytes > ProtocolInfo.TagBudgetBytes)
-            ImGui.TextColored(Yellow, "Tag exceeds the size target; published, delivery unconfirmed.");
-        var age = stats.LastPartnerTagAtMs is { } at ? $"{(Environment.TickCount64 - at) / 1000.0:0.0} s ago" : "never";
-        ImGui.TextUnformatted($"Partner tags received: {stats.Receives}   last: {age}");
+        var relay = Session.Relay;
+        ImGui.TextUnformatted($"Relay: {relay.Status}{(relay.LastError is { } relayError ? " (" + relayError + ")" : "")}");
+        ImGui.TextUnformatted($"Messages sent: {stats.MessagesSent}   last size: {stats.LastMessageBytes / 1024.0:0.0} KB   tag publishes: {stats.TagPublishes}");
+        var age = stats.LastPartnerMessageAtMs is { } at ? $"{(Environment.TickCount64 - at) / 1000.0:0.0} s ago" : "never";
+        ImGui.TextUnformatted($"Partner messages received: {stats.MessagesReceived}   last: {age}");
         ImGui.TextUnformatted($"Bones applied from partner: {stats.AppliedBones}   read + diff: {stats.SampleMs:0.000} ms");
         if (stats.LastError is { } error)
             ImGui.TextColored(Red, $"Last error: {error}");
         if (Session.Channel.LastError is { } channelError)
             ImGui.TextColored(Red, channelError);
 
+        DrawRelayUrl();
         DrawDetection();
 
         if (ImGui.Button("Log bones"))
@@ -210,6 +244,19 @@ public class MainWindow : Window, IDisposable
             ImGui.TextWrapped(debugMessage);
 
         DrawChannelTest();
+    }
+
+    private void DrawRelayUrl()
+    {
+        var config = plugin.Configuration;
+        var url = config.RelayUrl;
+        ImGui.SetNextItemWidth(300);
+        if (ImGui.InputTextWithHint("Relay URL override##RelayUrl", Configuration.DefaultRelayUrl, ref url, 256))
+        {
+            config.RelayUrl = url;
+            config.Save();
+        }
+        ImGui.TextColored(Grey, "Empty uses the CoPose relay. Changes apply on the next connection.");
     }
 
     /// <summary>Which GPose actors CoPose sees, and why a session character is (or isn't) found.</summary>

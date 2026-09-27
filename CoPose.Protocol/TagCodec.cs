@@ -55,8 +55,7 @@ public static class TagCodec
             var compressed = Convert.FromBase64String(text[(colon + 1)..]);
             var packed = Compression.Decompress(compressed, MaxDecompressedBytes);
             var decoded = Wire.Deserialize<TagState>(packed);
-            if (decoded is null || decoded.Version != ProtocolInfo.Version || decoded.Actors is null || decoded.Resolved is null
-                || decoded.Actors.Any(a => a is null || a.Names is null || a.Values is null || a.Clocks is null || !a.IsWellFormed))
+            if (decoded is null || decoded.Version != ProtocolInfo.Version || decoded.Nonce is not { Length: TagState.NonceLength })
                 return TagDecodeStatus.Malformed;
 
             state = decoded;

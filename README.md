@@ -1,23 +1,18 @@
 # CoPose
 
 Pose together in GPose. Pair up with someone nearby, and either of you can pose **either** character with Ktisis.
-Edits reach your partner about a second after you make them. No servers, codes, ports or VPNs: CoPose rides on
-the Player Sync or Lightless connection you already have.
+Edits show up on your partner's screen live, while you're both in GPose. No codes, ports or VPNs: you pair through
+the Player Sync or Lightless connection you already have, and pose data goes through a small CoPose relay.
 
-> Early release. Syncs bone posing only. Moving characters' root positions, soft locks and per-partner permissions
-> are not in this version, and dragging shows up on your partner's screen in steps rather than smoothly.
+> Syncs bone posing only. Moving characters' root positions, soft locks and per-partner permissions are not in this
+> version.
 
 ## Requirements (both players)
 
 - [Ktisis](https://github.com/ktisis-tools/Ktisis), with posing mode on while you pose.
-- [SimpleHeels](https://github.com/Caraxi/SimpleHeels): CoPose data travels in a SimpleHeels tag.
+- [SimpleHeels](https://github.com/Caraxi/SimpleHeels): used to find each other and pair.
 - **Player Sync or Lightless**, with the two of you **paired with each other** there.
-- The same CoPose version, and being near each other (same instance/area).
-
-**Lightless 3.3.0.0 compatibility:** its stock client defers SimpleHeels updates while in GPose.
-That prevents live CoPose updates even when pairing works, and can make the last pose appear after leaving
-and re-entering GPose. CoPose 0.2.3 fixes lost apply retries but does not remove this transport limitation.
-It does not modify or replace Lightless. Raising the tag budget does not fix the transport limitation.
+- The same CoPose version (0.3 doesn't work with 0.2), and being near each other (same instance/area).
 
 ## Install
 
@@ -27,19 +22,45 @@ It does not modify or replace Lightless. Raising the tag budget does not fix the
 
 ## Use
 
-1. Both players open `/copose`. After a few seconds each of you appears in the other's **Nearby CoPose players** list.
-2. One of you clicks **Pose with <name>**. The other sees the request and clicks **Accept**.
-3. Both enter GPose and turn on Ktisis posing. When both show **ready**, pose either character.
+1. **Pair before entering GPose.** Both players open `/copose`, and after a few seconds each of you appears in the
+   other's **Nearby CoPose players** list. One clicks **Pose with <name>**, the other clicks **Accept**.
+2. Both enter GPose and turn on Ktisis posing. The window shows **Live sync connected** and both players **ready**.
+3. Pose either character. Your partner sees it within a fraction of a second.
 
-- **Push pose** re-sends a character's whole current pose, for example after loading a `.pose` file onto it.
-- **Stop posing together** (or `/copose stop`) ends the session for both of you.
+- Sync is automatic, including catching up when one of you enters GPose later. **Push pose** is only an override.
+- **Reset** returns a character to the pose it had when you became ready (on both screens). **Reset both** does
+  both characters.
+- **Stop posing together** (or `/copose stop`) ends the session for both of you, even inside GPose.
 
-### If your partner doesn't show up
+### Why pair outside GPose?
 
-- Check the top of the CoPose window: Ktisis, SimpleHeels and Player Sync/Lightless should all show green.
-- You must be paired with each other in Player Sync/Lightless and near each other. If your partner's character
-  looks right (their mods and glamour sync), the connection is working.
-- The **Debug** section has a **Channel test**: publish a test tag and check that it arrives on your partner's side.
+Player Sync and Lightless hold back updates from paired players while you're in GPose, and pairing travels that way.
+Once you're paired, CoPose talks to your partner over its relay, which works in GPose. If one of you reloads the
+plugin mid-session, pair again outside GPose.
+
+### If something doesn't work
+
+- The top of the CoPose window should show Ktisis, SimpleHeels and Player Sync/Lightless in green.
+- You must be paired with each other in Player Sync/Lightless and near each other to see each other in the list.
+- **Relay unreachable**: check your internet connection. CoPose keeps retrying on its own.
+- The **Debug** section shows the relay state, messages sent and received, and character detection.
+
+## Relay
+
+`CoPose.Relay/` is a Cloudflare Worker with one Durable Object per two-player room. It forwards messages between the
+two players and keeps each one's latest state so the other can catch up. It knows nothing about poses and deletes
+a room 10 minutes after both players leave. The room id is derived from secrets only the two paired players know.
+
+```
+cd CoPose.Relay
+npm ci
+npm test                      # vitest in the Workers runtime
+npm run dev                   # local relay on http://127.0.0.1:8787
+npx wrangler deploy --env production
+```
+
+To test against a local relay, set **Debug → Relay URL override** in the plugin. The end-to-end test runs with
+`COPOSE_RELAY_URL=http://127.0.0.1:8787 dotnet test --project CoPose.Tests/CoPose.Tests.csproj`.
 
 ## Build from source
 
@@ -54,8 +75,8 @@ Load `CoPose/bin/x64/Debug/CoPose.dll` as a dev plugin (`/xlsettings` → Experi
 
 ## Releasing
 
-Push a version tag (`git tag v0.2.0 && git push origin v0.2.0`). The Release workflow builds, tests, publishes
-`latest.zip` as a GitHub release, and updates `repo.json` on `master`.
+Push a version tag (`git tag v0.3.0 && git push origin v0.3.0`). The Release workflow builds, tests, publishes
+`latest.zip` as a GitHub release, and updates `repo.json` on `master`. Relay deploys are separate and manual.
 
 ## License
 

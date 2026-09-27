@@ -90,12 +90,18 @@ public sealed class SceneState
     }
 
     /// <summary>The bones <paramref name="author"/> currently holds the newest version of, as tag data (sorted for stable output).</summary>
-    public TagActor[] ExportAuthored(ActorKey author)
+    public TagActor[] ExportAuthored(ActorKey author) => ExportAuthored(author, null);
+
+    /// <summary>Like <see cref="ExportAuthored(ActorKey)"/>, limited to the given bones (a live delta).</summary>
+    public TagActor[] ExportAuthored(ActorKey author, IReadOnlySet<(ActorKey Actor, string Bone)>? only)
     {
         var result = new List<TagActor>();
         foreach (var (key, bones) in actors.OrderBy(a => a.Key))
         {
-            var mine = bones.Where(b => b.Value.Version.Author == author).OrderBy(b => b.Key, StringComparer.Ordinal).ToList();
+            var mine = bones
+                .Where(b => b.Value.Version.Author == author && (only == null || only.Contains((key, b.Key))))
+                .OrderBy(b => b.Key, StringComparer.Ordinal)
+                .ToList();
             if (mine.Count == 0)
                 continue;
 

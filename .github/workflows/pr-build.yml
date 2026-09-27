@@ -42,3 +42,33 @@ jobs:
         path: .\CoPose\bin\x64\Release\CoPose\*
         if-no-files-found: error
         retention-days: 1
+
+  relay:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: CoPose.Relay
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+
+    - name: Install Node
+      uses: actions/setup-node@v5
+      with:
+        node-version: 22
+        cache: npm
+        cache-dependency-path: CoPose.Relay/package-lock.json
+
+    - name: Install
+      run: npm ci
+
+    - name: Lint
+      run: npm run lint
+
+    - name: Typecheck
+      run: npm run typecheck
+
+    - name: Test
+      run: npm test

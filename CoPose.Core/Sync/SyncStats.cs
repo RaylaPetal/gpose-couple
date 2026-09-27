@@ -3,17 +3,20 @@ namespace CoPose.Core.Sync;
 /// <summary>Diagnostics shown in the plugin's debug panel.</summary>
 public sealed class SyncStats
 {
-    /// <summary>Times the local tag was (re)published.</summary>
-    public long Publishes { get; private set; }
+    /// <summary>Times the local pairing tag was (re)published.</summary>
+    public long TagPublishes { get; private set; }
 
-    /// <summary>Tag updates received from the partner.</summary>
-    public long Receives { get; private set; }
+    /// <summary>State messages sent to the relay.</summary>
+    public long MessagesSent { get; private set; }
 
-    /// <summary>Size in characters of the last published tag.</summary>
-    public int LastTagBytes { get; private set; }
+    /// <summary>State messages received from the partner in this session.</summary>
+    public long MessagesReceived { get; private set; }
 
-    /// <summary>Clock time of the partner's last tag update, or null if none yet.</summary>
-    public long? LastPartnerTagAtMs { get; private set; }
+    /// <summary>Size in bytes of the last sent relay frame.</summary>
+    public int LastMessageBytes { get; private set; }
+
+    /// <summary>Clock time of the partner's last state message, or null if none yet in this session.</summary>
+    public long? LastPartnerMessageAtMs { get; private set; }
 
     /// <summary>Bones in writes the pose writer has acknowledged successfully (not attempted writes).</summary>
     public long AppliedBones { get; private set; }
@@ -25,16 +28,18 @@ public sealed class SyncStats
 
     public long LastErrorAtMs { get; private set; }
 
-    internal void Published(int bytes)
+    internal void TagPublished() => TagPublishes++;
+
+    internal void Sent(int bytes)
     {
-        Publishes++;
-        LastTagBytes = bytes;
+        MessagesSent++;
+        LastMessageBytes = bytes;
     }
 
     internal void Received(long nowMs)
     {
-        Receives++;
-        LastPartnerTagAtMs = nowMs;
+        MessagesReceived++;
+        LastPartnerMessageAtMs = nowMs;
     }
 
     internal void Applied(int bones) => AppliedBones += bones;
@@ -47,10 +52,10 @@ public sealed class SyncStats
         LastErrorAtMs = nowMs;
     }
 
-    /// <summary>A new partner was chosen: receive stats start over, from their current tag if known.</summary>
-    internal void PartnerChosen(long? lastTagAtMs)
+    /// <summary>A new session started: partner message stats start over.</summary>
+    internal void SessionStarted()
     {
-        Receives = 0;
-        LastPartnerTagAtMs = lastTagAtMs;
+        MessagesReceived = 0;
+        LastPartnerMessageAtMs = null;
     }
 }

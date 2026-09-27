@@ -1,5 +1,6 @@
 using System;
 using CoPose.Core;
+using CoPose.Core.Relay;
 using CoPose.Core.Sync;
 using CoPose.Core.Tags;
 using CoPose.Interop;
@@ -29,7 +30,8 @@ public sealed class SessionManager : IDisposable
     private ActorKey? lastPartner;
 
     public SessionManager(IClientState clientState, KtisisIpc ktisis, SimpleHeelsIpc heels, Prerequisites prerequisites,
-        HeelsTagChannel channel, GposeActorRegistry registry, HavokPoseReader reader, IPoseWriter writer, ISyncEnvironment environment)
+        HeelsTagChannel channel, GposeActorRegistry registry, HavokPoseReader reader, IPoseWriter writer, ISyncEnvironment environment,
+        Func<string> relayUrl)
     {
         this.clientState = clientState;
         this.ktisis = ktisis;
@@ -38,11 +40,14 @@ public sealed class SessionManager : IDisposable
         this.registry = registry;
         this.reader = reader;
         Channel = channel;
-        Client = new CoPoseClient(channel, () => registry.LocalKey, registry, reader, writer, environment);
+        Relay = new RelayChannel(relayUrl);
+        Client = new CoPoseClient(channel, Relay, () => registry.LocalKey, registry, reader, writer, environment);
         prerequisites.Refresh();
     }
 
     public CoPoseClient Client { get; }
+
+    public RelayChannel Relay { get; }
 
     public HeelsTagChannel Channel { get; }
 
@@ -81,10 +86,16 @@ public sealed class SessionManager : IDisposable
 
     public bool PushPose(ActorKey actor) => Client.PushPose(actor);
 
+    public bool Reset(ActorKey actor) => Client.Reset(actor);
+
+    public bool ResetBoth() => Client.ResetBoth();
+
     public PairingStatus Status => Client.Status;
 
     public void Dispose()
     {
+        // Sends Stop over the relay while still connected, then closes it.
         Client.Dispose();
+        Relay.Dispose();
     }
 }

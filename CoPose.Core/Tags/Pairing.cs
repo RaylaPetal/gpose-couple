@@ -85,11 +85,21 @@ public sealed class Pairing(long graceMs = 10_000)
         }
     }
 
-    /// <summary>Drops peers gone longer than the grace period and ends the session when the partner leaves or stops.</summary>
-    public void Tick(ActorKey me, long now)
+    /// <summary>
+    /// Drops peers gone longer than the grace period and ends the pairing when the partner leaves or stops.
+    /// With <paramref name="holdChosen"/> (a live relay session decides liveness itself) the chosen partner is kept:
+    /// sync services defer tag updates in GPose, so tags there are stale, not authoritative.
+    /// </summary>
+    public void Tick(ActorKey me, long now, bool holdChosen = false)
     {
-        foreach (var gone in peers.Values.Where(p => !p.Present && now - p.LastChangeMs >= graceMs).ToList())
+        foreach (var gone in peers.Values.Where(p => !p.Present && now - p.LastChangeMs >= graceMs && !(holdChosen && p.Key == Chosen)).ToList())
             peers.Remove(gone.Key);
+
+        if (holdChosen)
+        {
+            wasPaired = Status(me) == PairingStatus.Paired;
+            return;
+        }
 
         if (Chosen is { } chosen && !peers.ContainsKey(chosen))
         {
@@ -119,5 +129,12 @@ public sealed class Pairing(long graceMs = 10_000)
     {
         Chosen = null;
         wasPaired = false;
+    }
+
+    /// <summary>Ends the pairing for a reason the UI shows (partner stopped over the relay, or gone).</summary>
+    public void End(string reason)
+    {
+        Stop();
+        EndReason = reason;
     }
 }

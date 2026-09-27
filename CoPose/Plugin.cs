@@ -50,7 +50,7 @@ public sealed class Plugin : IDalamudPlugin
         Writer = new KtisisIpcPoseWriter(Ktisis, Reader);
         Channel = new HeelsTagChannel(Heels, ObjectTable, Log);
         Session = new SessionManager(ClientState, Ktisis, Heels, Prerequisites, Channel, Registry, Reader, Writer,
-            new SyncEnvironment(ClientState, Ktisis));
+            new SyncEnvironment(ClientState, Ktisis), Configuration.GetRelayUrl);
 
         MainWindow = new MainWindow(this);
         WindowSystem.AddWindow(MainWindow);
