@@ -1,16 +1,18 @@
 # CoPose
 
-Pose together in GPose. Two players pair up with an invite code, and either of them can pose **either** character
-with Ktisis. Bone edits are mirrored live on both clients.
+Pose together in GPose. Pair up with someone nearby, and either of you can pose **either** character with Ktisis.
+Edits reach your partner about a second after you make them. No servers, codes, ports or VPNs: CoPose rides on
+the Player Sync or Lightless connection you already have.
 
-> Early release (MVP). Syncs bone posing only: moving characters' root positions, soft locks, per-partner
-> permissions and auto-reconnect are not in this version.
+> Early release. Syncs bone posing only. Moving characters' root positions, soft locks and per-partner permissions
+> are not in this version, and dragging shows up on your partner's screen in steps rather than smoothly.
 
-## Requirements
+## Requirements (both players)
 
-- [Ktisis](https://github.com/ktisis-tools/Ktisis) with posing mode on, for both players.
-- Both players in the same instance/area, both in GPose.
-- Both players on the same CoPose version.
+- [Ktisis](https://github.com/ktisis-tools/Ktisis), with posing mode on while you pose.
+- [SimpleHeels](https://github.com/Caraxi/SimpleHeels): CoPose data travels in a SimpleHeels tag.
+- **Player Sync or Lightless**, with the two of you **paired with each other** there.
+- The same CoPose version, and being near each other (same instance/area).
 
 ## Install
 
@@ -20,25 +22,19 @@ with Ktisis. Bone edits are mirrored live on both clients.
 
 ## Use
 
-1. **Host:** open `/copose`, click **Host**, and send your partner the invite code (`CP2-…`).
-2. **Partner:** paste the code in **Join a session** and click **Join** (or `/copose join <code>`).
-3. Both of you enter GPose and turn on Ktisis posing. When both show **Ready**, drag bones on either character.
+1. Both players open `/copose`. After a few seconds each of you appears in the other's **Nearby CoPose players** list.
+2. One of you clicks **Pose with <name>**. The other sees the request and clicks **Accept**.
+3. Both enter GPose and turn on Ktisis posing. When both show **ready**, pose either character.
 
-Commands: `/copose` (window), `/copose host`, `/copose join <invite>`, `/copose leave`.
+- **Push pose** re-sends a character's whole current pose, for example after loading a `.pose` file onto it.
+- **Stop posing together** (or `/copose stop`) ends the session for both of you.
 
-### If your partner can't connect
+### If your partner doesn't show up
 
-The host's PC has to be reachable. The host window shows what worked:
-
-- **Reachable from internet (UPnP):** nothing else to do.
-- **LAN/VPN only:** your router or ISP blocks incoming connections. Pick one:
-  - **Tunnel (only the host installs anything):** run a TCP tunnel such as [playit.gg](https://playit.gg) to local
-    port 47715, and paste its address (e.g. `name.gl.at.ply.gg:34567`) into **Public address** before clicking **Host**.
-  - **VPN:** both players install [Tailscale](https://tailscale.com), and the host puts their `100.x.y.z` address
-    in **Public address**.
-  - **Port-forward:** forward TCP 47715 on your router, and put your public IP in **Public address**.
-
-If Windows Firewall asks about FINAL FANTASY XIV when you host, allow it.
+- Check the top of the CoPose window: Ktisis, SimpleHeels and Player Sync/Lightless should all show green.
+- You must be paired with each other in Player Sync/Lightless and near each other. If your partner's character
+  looks right (their mods and glamour sync), the connection is working.
+- The **Debug** section has a **Channel test**: publish a test tag and check that it arrives on your partner's side.
 
 ## Build from source
 

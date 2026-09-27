@@ -34,12 +34,6 @@ public sealed class KtisisIpcPoseWriter(KtisisIpc ktisis, IPoseReader reader) : 
         return ktisis.ApplyAbsolutePoses(actor.ObjectIndex, matrices);
     }
 
-    public Task<bool> ApplySnapshotAsync(ActorHandle actor, string poseJson) =>
-        ktisis.Available ? ktisis.LoadPose(actor.ObjectIndex, poseJson) : Task.FromResult(false);
-
-    public Task<string?> ExportSnapshotAsync(ActorHandle actor) =>
-        ktisis.Available ? ktisis.SavePose(actor.ObjectIndex) : Task.FromResult<string?>(null);
-
     /// <summary>Scale, then rotation, then translation, as Ktisis decomposes it.</summary>
     public static Matrix4x4 Compose(in BoneSample sample) =>
         Matrix4x4.CreateScale(ClampScale(sample.Scale))

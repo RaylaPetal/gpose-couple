@@ -28,9 +28,12 @@ public sealed class Plugin : IDalamudPlugin
     public readonly WindowSystem WindowSystem = new("CoPose");
 
     internal KtisisIpc Ktisis { get; }
+    internal SimpleHeelsIpc Heels { get; }
+    internal Prerequisites Prerequisites { get; }
     internal GposeActorRegistry Registry { get; }
     internal HavokPoseReader Reader { get; }
     internal KtisisIpcPoseWriter Writer { get; }
+    internal HeelsTagChannel Channel { get; }
     internal SessionManager Session { get; }
 
     private MainWindow MainWindow { get; init; }
@@ -40,17 +43,21 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
         Ktisis = new KtisisIpc(PluginInterface);
+        Heels = new SimpleHeelsIpc(PluginInterface);
+        Prerequisites = new Prerequisites(PluginInterface);
         Registry = new GposeActorRegistry(ObjectTable, ClientState, PlayerState);
         Reader = new HavokPoseReader(ObjectTable);
         Writer = new KtisisIpcPoseWriter(Ktisis, Reader);
-        Session = new SessionManager(Configuration, ClientState, Log, Ktisis, Registry, Reader, Writer, new SyncEnvironment(ClientState, Ktisis));
+        Channel = new HeelsTagChannel(Heels, ObjectTable, Log);
+        Session = new SessionManager(ClientState, Ktisis, Heels, Prerequisites, Channel, Registry, Reader, Writer,
+            new SyncEnvironment(ClientState, Ktisis));
 
         MainWindow = new MainWindow(this);
         WindowSystem.AddWindow(MainWindow);
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Toggle the CoPose window. /copose host · /copose join <invite> · /copose leave"
+            HelpMessage = "Toggle the CoPose window. /copose stop · stop posing together"
         });
 
         PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
@@ -71,7 +78,10 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.RemoveHandler(CommandName);
 
+        // Removing our tag tells the partner the session ended.
         Session.Dispose();
+        Channel.Dispose();
+        Heels.Dispose();
         Ktisis.Dispose();
     }
 
@@ -83,40 +93,23 @@ public sealed class Plugin : IDalamudPlugin
         }
         catch (System.Exception e)
         {
-            Log.Error(e, "CoPose sync tick failed");
+            Log.Error(e, "CoPose tick failed");
         }
     }
 
     private void OnCommand(string command, string args)
     {
-        var parts = args.Trim().Split(' ', 2, System.StringSplitOptions.RemoveEmptyEntries);
-        var verb = parts.Length > 0 ? parts[0].ToLowerInvariant() : string.Empty;
-
-        switch (verb)
+        switch (args.Trim().ToLowerInvariant())
         {
             case "":
                 MainWindow.Toggle();
                 break;
-            case "host":
-                if (Session.Host())
-                    ChatGui.Print("[CoPose] Hosting. Share the invite code from the CoPose window.");
-                else
-                    ChatGui.PrintError($"[CoPose] {Session.LastError}");
-                MainWindow.IsOpen = true;
-                break;
-            case "join" when parts.Length > 1:
-                if (Session.Join(parts[1]))
-                    ChatGui.Print("[CoPose] Joining...");
-                else
-                    ChatGui.PrintError($"[CoPose] {Session.LastError}");
-                MainWindow.IsOpen = true;
-                break;
-            case "leave":
-                Session.Leave();
-                ChatGui.Print("[CoPose] Left the session.");
+            case "stop":
+                Session.Stop();
+                ChatGui.Print("[CoPose] Stopped posing together.");
                 break;
             default:
-                ChatGui.PrintError("[CoPose] Usage: /copose [host | join <invite> | leave]");
+                ChatGui.PrintError("[CoPose] Usage: /copose [stop]");
                 break;
         }
     }

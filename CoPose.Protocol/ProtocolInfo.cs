@@ -2,16 +2,18 @@ namespace CoPose.Protocol;
 
 public static class ProtocolInfo
 {
-    /// <summary>Wire protocol version. Bump on any incompatible change to frames or message bodies.</summary>
-    public const int Version = 1;
+    /// <summary>Tag protocol version. Bump on any incompatible change to <see cref="TagState"/>; it is part of the tag prefix.</summary>
+    public const int Version = 2;
 
-    public const int DefaultPort = 47715;
+    /// <summary>The SimpleHeels tag CoPose publishes on the local player's character.</summary>
+    public const string TagKey = "CoPose";
 
-    /// <summary>Largest frame (after the length prefix) accepted from a peer.</summary>
-    public const int MaxFrameBytes = 128 * 1024;
+    /// <summary>The SimpleHeels tag used by the channel-test debug panel.</summary>
+    public const string TestTagKey = "CoPose-test";
 
-    /// <summary>Largest envelope body a participant may send.</summary>
-    public const int MaxBodyBytes = 64 * 1024;
+    /// <summary>Target maximum size of an encoded tag, in characters.</summary>
+    public const int TagBudgetBytes = 16 * 1024;
 
-    public const int SecretLength = 8;
+    /// <summary>Hard limit on a received tag, to refuse garbage before decoding.</summary>
+    public const int MaxTagBytes = 256 * 1024;
 }

@@ -1,24 +1,22 @@
 namespace CoPose.Core.Sync;
 
-/// <summary>Diagnostics shown in the plugin's debug panel. Rates are over the last completed one-second window.</summary>
+/// <summary>Diagnostics shown in the plugin's debug panel.</summary>
 public sealed class SyncStats
 {
-    private long windowStart = -1;
-    private int sentInWindow;
-    private int receivedInWindow;
-    private long sentDeltas;
-    private long sentDeltaBones;
+    /// <summary>Times the local tag was (re)published.</summary>
+    public long Publishes { get; private set; }
 
-    public int SentPerSecond { get; private set; }
+    /// <summary>Tag updates received from the partner.</summary>
+    public long Receives { get; private set; }
 
-    /// <summary>Messages received from other participants (own echoes excluded).</summary>
-    public int ReceivedPerSecond { get; private set; }
+    /// <summary>Size in characters of the last published tag.</summary>
+    public int LastTagBytes { get; private set; }
 
-    public long TotalSent { get; private set; }
+    /// <summary>Clock time of the partner's last tag update, or null if none yet.</summary>
+    public long? LastPartnerTagAtMs { get; private set; }
 
-    public long TotalReceived { get; private set; }
-
-    public double AverageBonesPerDelta => sentDeltas == 0 ? 0 : (double)sentDeltaBones / sentDeltas;
+    /// <summary>Bones applied from the partner's edits so far.</summary>
+    public long AppliedBones { get; private set; }
 
     /// <summary>Average time spent reading and diffing per sample, in milliseconds.</summary>
     public double SampleMs { get; private set; }
@@ -27,22 +25,19 @@ public sealed class SyncStats
 
     public long LastErrorAtMs { get; private set; }
 
-    internal void Sent(int bonesInDelta = -1)
+    internal void Published(int bytes)
     {
-        sentInWindow++;
-        TotalSent++;
-        if (bonesInDelta >= 0)
-        {
-            sentDeltas++;
-            sentDeltaBones += bonesInDelta;
-        }
+        Publishes++;
+        LastTagBytes = bytes;
     }
 
-    internal void Received()
+    internal void Received(long nowMs)
     {
-        receivedInWindow++;
-        TotalReceived++;
+        Receives++;
+        LastPartnerTagAtMs = nowMs;
     }
+
+    internal void Applied(int bones) => AppliedBones += bones;
 
     internal void SampleTook(double ms) => SampleMs = SampleMs == 0 ? ms : SampleMs * 0.9 + ms * 0.1;
 
@@ -52,22 +47,8 @@ public sealed class SyncStats
         LastErrorAtMs = nowMs;
     }
 
-    internal void Roll(long nowMs)
+    internal void Reset()
     {
-        if (windowStart < 0)
-        {
-            windowStart = nowMs;
-            return;
-        }
-        if (nowMs - windowStart < 1000)
-            return;
-
-        // A gap of several seconds means the last full window had no traffic.
-        var stale = nowMs - windowStart >= 2000;
-        SentPerSecond = stale ? 0 : sentInWindow;
-        ReceivedPerSecond = stale ? 0 : receivedInWindow;
-        sentInWindow = 0;
-        receivedInWindow = 0;
-        windowStart = nowMs;
+        LastPartnerTagAtMs = null;
     }
 }

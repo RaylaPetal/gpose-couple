@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using CoPose.Core.Sync;
-using CoPose.Net;
+using CoPose.Core.Tags;
+using CoPose.Protocol;
 using CoPose.Session;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Utility.Raii;
@@ -18,7 +20,6 @@ public class MainWindow : Window, IDisposable
     private static readonly Vector4 Grey = new(0.6f, 0.6f, 0.6f, 1f);
 
     private readonly Plugin plugin;
-    private string inviteInput = string.Empty;
     private string debugMessage = string.Empty;
 
     public MainWindow(Plugin plugin)
@@ -26,7 +27,7 @@ public class MainWindow : Window, IDisposable
     {
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(420, 360),
+            MinimumSize = new Vector2(420, 320),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
         };
         this.plugin = plugin;
@@ -38,175 +39,146 @@ public class MainWindow : Window, IDisposable
 
     public override void Draw()
     {
-        DrawEnvironment();
+        DrawPrerequisites();
         ImGui.Separator();
-        DrawSession();
 
-        if (Session.Sync is { } sync)
+        if (!plugin.Heels.Available)
         {
-            ImGui.Separator();
-            DrawParticipants(sync);
+            ImGui.TextWrapped("CoPose sends poses through SimpleHeels tags, which your sync service (Player Sync or Lightless) delivers to your partner. Install and enable SimpleHeels to continue.");
+        }
+        else if (Session.Self is not { } me)
+        {
+            ImGui.TextUnformatted("Log in to a character to use CoPose.");
+        }
+        else
+        {
+            DrawPairing(me);
         }
 
         ImGui.Spacing();
         DrawDebug();
     }
 
-    private void DrawEnvironment()
+    private void DrawPrerequisites()
     {
         var ktisis = plugin.Ktisis;
-        if (!ktisis.Available)
-        {
-            ImGui.TextColored(Red, ktisis.ApiVersion is { } v
-                ? $"Ktisis API {v.Major}.{v.Minor} is not supported (need {Interop.KtisisIpc.SupportedMajorVersion}.x)."
-                : "Ktisis not available. Install and enable Ktisis.");
-        }
-        else
-        {
-            ImGui.TextColored(Green, $"Ktisis API {ktisis.ApiVersion!.Value.Major}.{ktisis.ApiVersion.Value.Minor}");
-        }
-
+        StatusText(ktisis.Available, ktisis.ApiVersion is { } kv ? $"Ktisis {kv.Major}.{kv.Minor}" : "Ktisis", "Ktisis missing");
         ImGui.SameLine();
+        var heels = plugin.Heels;
+        if (heels.Available)
+            ImGui.TextColored(Green, $"SimpleHeels {heels.ApiVersion!.Value.Major}.{heels.ApiVersion.Value.Minor}");
+        else
+            ImGui.TextColored(Red, heels.ApiVersion is { } hv ? $"SimpleHeels {hv.Major}.{hv.Minor} unsupported" : "SimpleHeels missing");
+        ImGui.SameLine();
+        if (plugin.Prerequisites.SyncService is { } sync)
+            ImGui.TextColored(Green, sync);
+        else
+            ImGui.TextColored(Yellow, "No Player Sync/Lightless");
+
         StatusText(Plugin.ClientState.IsGPosing, "In GPose", "Not in GPose");
         ImGui.SameLine();
         StatusText(ktisis.IsPosing, "Posing on", "Posing off");
+
+        if (plugin.Prerequisites.SyncService == null && heels.Available)
+            ImGui.TextWrapped("Your partner only receives CoPose data through Player Sync or Lightless, and you must be paired with each other there.");
     }
 
-    private void DrawSession()
+    private void DrawPairing(ActorKey me)
     {
-        switch (Session.Mode)
+        var client = Session.Client;
+        var pairing = client.Pairing;
+
+        switch (client.Status)
         {
-            case SessionMode.Idle:
-                DrawIdle();
+            case PairingStatus.Idle:
+                DrawIdle(me, pairing);
                 break;
-            case SessionMode.Hosting:
-                DrawHosting();
-                break;
-            case SessionMode.Joining:
-                ImGui.TextColored(Yellow, "Connecting to host...");
+            case PairingStatus.Waiting:
+                ImGui.TextColored(Yellow, $"Waiting for {pairing.Chosen!.Value.Name} to accept...");
+                ImGui.TextWrapped("They'll see your request in their CoPose window.");
                 if (ImGui.Button("Cancel"))
-                    Session.Leave();
+                    Session.Stop();
                 break;
-            case SessionMode.Joined:
-                ImGui.TextColored(Green, "Connected to the host's session.");
-                if (ImGui.Button("Leave"))
-                    Session.Leave();
+            case PairingStatus.Paired:
+                DrawPaired(me, pairing);
                 break;
         }
 
-        if (Session.LastError is { } error)
-            ImGui.TextColored(Red, error);
+        if (client.Status == PairingStatus.Idle && pairing.EndReason is { } reason)
+            ImGui.TextColored(Yellow, reason);
     }
 
-    private void DrawIdle()
+    private void DrawIdle(ActorKey me, Pairing pairing)
     {
-        var config = plugin.Configuration;
-
-        ImGui.TextUnformatted("Host a session");
-        var port = config.HostPort;
-        ImGui.SetNextItemWidth(120);
-        if (ImGui.InputInt("Port##HostPort", ref port) && port is > 0 and <= 65535)
+        foreach (var request in pairing.Requests(me).ToList())
         {
-            config.HostPort = port;
-            config.Save();
-        }
-
-        var manual = config.ManualPublicAddress;
-        ImGui.SetNextItemWidth(260);
-        if (ImGui.InputTextWithHint("Public address (optional)##Manual", "Tailscale IP, or tunnel e.g. name.ply.gg:34567", ref manual, 128))
-        {
-            config.ManualPublicAddress = manual;
-            config.Save();
-        }
-
-        if (ImGui.Button("Host"))
-            Session.Host();
-
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Join a session");
-        ImGui.SetNextItemWidth(320);
-        ImGui.InputTextWithHint("##Invite", "Paste invite code (CP2-...)", ref inviteInput, 128);
-        ImGui.SameLine();
-        using (ImRaii.Disabled(string.IsNullOrWhiteSpace(inviteInput)))
-        {
-            if (ImGui.Button("Join"))
-                Session.Join(inviteInput);
-        }
-    }
-
-    private void DrawHosting()
-    {
-        ImGui.TextColored(Green, $"Hosting on port {Session.HostedPort}.");
-
-        var invite = Session.InviteCode ?? string.Empty;
-        ImGui.TextUnformatted("Invite code:");
-        ImGui.SetNextItemWidth(320);
-        ImGui.InputText("##InviteCode", ref invite, 128, ImGuiInputTextFlags.ReadOnly);
-        ImGui.SameLine();
-        if (ImGui.Button("Copy"))
-            ImGui.SetClipboardText(invite);
-
-        if (Session.Upnp is { } upnp)
-        {
-            var (color, label) = upnp.Status switch
-            {
-                Reachability.Internet => (Green, "Reachable from internet (UPnP)"),
-                Reachability.LanOnly => (Yellow, "LAN/VPN only"),
-                _ => (Grey, "Mapping in progress..."),
-            };
-            if (Session.PublicEndpoint != null)
-            {
-                // A tunnel/VPN/port-forward address makes the router's UPnP result secondary.
-                ImGui.TextColored(Green, $"Reachable through {plugin.Configuration.ManualPublicAddress}");
-                using (ImRaii.PushColor(ImGuiCol.Text, Grey))
-                    ImGui.TextWrapped($"Router (UPnP): {label}. {upnp.Detail} This doesn't affect your public/tunnel address.");
-            }
-            else
-            {
-                ImGui.TextColored(color, label);
-                ImGui.TextWrapped(upnp.Detail);
-            }
-        }
-        if (Session.LanAddress is { } lan)
-            ImGui.TextColored(Grey, $"LAN address: {lan}:{Session.HostedPort}");
-        if (Session.ResolvingPublicAddress)
-            ImGui.TextColored(Grey, $"Resolving {plugin.Configuration.ManualPublicAddress}...");
-        else if (Session.PublicEndpoint is { } publicEndpoint)
-            ImGui.TextColored(Green, $"Public/tunnel address in invite: {plugin.Configuration.ManualPublicAddress} ({publicEndpoint})");
-        else if (Session.PublicAddressError is { } publicError)
-            ImGui.TextColored(Red, $"Public address not used: {publicError}");
-        ImGui.TextWrapped("If Windows Firewall asks about FINAL FANTASY XIV, allow it, or your partner will not be able to connect.");
-
-        if (ImGui.Button("Stop hosting"))
-            Session.Leave();
-    }
-
-    private void DrawParticipants(SceneSync sync)
-    {
-        ImGui.TextUnformatted($"Participants ({(sync.IsReady ? "you are ready" : "you are not ready")})");
-        foreach (var participant in sync.Participants)
-        {
-            var key = participant.Info.Actor;
-            var resolved = sync.IsResolved(key);
-
-            StatusText(participant.Ready, "Ready", "Not ready");
+            ImGui.TextColored(Green, $"{request.Key.Name} wants to pose with you.");
             ImGui.SameLine();
-            ImGui.TextUnformatted($"{participant.Info.DisplayName}{(participant.IsSelf ? " (you)" : "")}");
+            if (ImGui.Button($"Accept##{request.Key}"))
+                Session.Choose(request.Key);
+        }
+
+        var peers = pairing.Peers.ToList();
+        if (peers.Count == 0)
+        {
+            ImGui.TextWrapped("Nobody nearby is running CoPose yet. Your partner needs CoPose too, you must be paired in Player Sync or Lightless, and you must be near each other.");
+            return;
+        }
+
+        ImGui.TextUnformatted("Nearby CoPose players:");
+        foreach (var peer in peers)
+        {
+            ImGui.Bullet();
+            ImGui.SameLine();
+            ImGui.TextUnformatted(peer.Key.Name);
+            ImGui.SameLine();
+            if (!peer.Compatible)
+            {
+                ImGui.TextColored(Grey, peer.IncompatibleVersion is { } v
+                    ? $"needs the same CoPose version (they have {v}, you have {ProtocolInfo.Version})"
+                    : "needs the same CoPose version");
+                continue;
+            }
+            if (ImGui.SmallButton($"Pose with##{peer.Key}"))
+                Session.Choose(peer.Key);
+        }
+    }
+
+    private void DrawPaired(ActorKey me, Pairing pairing)
+    {
+        var client = Session.Client;
+        var partner = pairing.ChosenPeer!;
+        ImGui.TextColored(Green, $"Posing together with {partner.Key.Name}.");
+        ImGui.SameLine();
+        if (ImGui.SmallButton("Stop posing together"))
+            Session.Stop();
+
+        if (client.Session is not { } session)
+            return;
+
+        ImGui.TextColored(Grey, "Your changes reach your partner about a second after you make them.");
+        ImGui.Spacing();
+
+        StatusText(session.Ready, "You: ready", "You: not ready");
+        ImGui.SameLine();
+        StatusText(partner.State?.Ready == true, $"{partner.Key.Name}: ready", $"{partner.Key.Name}: not ready");
+        if (!session.Ready)
+            ImGui.TextWrapped("To sync, enter GPose near your partner and turn on Ktisis posing.");
+
+        foreach (var key in new[] { me, partner.Key })
+        {
+            var resolved = session.Resolved.Contains(key);
+            ImGui.Bullet();
+            ImGui.SameLine();
+            ImGui.TextUnformatted(key == me ? $"{key.Name} (you)" : key.Name);
             ImGui.SameLine();
             StatusText(resolved, "character found", "character absent");
-
-            using (ImRaii.Disabled(!sync.IsReady || !resolved))
+            using (ImRaii.Disabled(!session.Ready || !resolved))
             {
                 ImGui.SameLine();
                 if (ImGui.SmallButton($"Push pose##{key}"))
                     Session.PushPose(key);
             }
-        }
-
-        using (ImRaii.Disabled(!sync.IsReady || sync.Participants.Count < 2))
-        {
-            if (ImGui.Button("Request resync"))
-                Session.RequestResync();
         }
     }
 
@@ -215,16 +187,15 @@ public class MainWindow : Window, IDisposable
         if (!ImGui.CollapsingHeader("Debug"))
             return;
 
-        if (Session.Sync is { } sync)
-        {
-            var stats = sync.Stats;
-            ImGui.TextUnformatted($"Sent: {stats.SentPerSecond}/s ({stats.TotalSent} total)");
-            ImGui.TextUnformatted($"Received: {stats.ReceivedPerSecond}/s ({stats.TotalReceived} total)");
-            ImGui.TextUnformatted($"Bones per delta: {stats.AverageBonesPerDelta:0.0}");
-            ImGui.TextUnformatted($"Read + diff: {stats.SampleMs:0.000} ms");
-            if (stats.LastError is { } error)
-                ImGui.TextColored(Red, $"Last error: {error}");
-        }
+        var stats = Session.Client.Stats;
+        ImGui.TextUnformatted($"Tag publishes: {stats.Publishes}   last size: {stats.LastTagBytes / 1024.0:0.0} KB (budget {ProtocolInfo.TagBudgetBytes / 1024} KB)");
+        var age = stats.LastPartnerTagAtMs is { } at ? $"{(Environment.TickCount64 - at) / 1000.0:0.0} s ago" : "never";
+        ImGui.TextUnformatted($"Partner tags received: {stats.Receives}   last: {age}");
+        ImGui.TextUnformatted($"Bones applied from partner: {stats.AppliedBones}   read + diff: {stats.SampleMs:0.000} ms");
+        if (stats.LastError is { } error)
+            ImGui.TextColored(Red, $"Last error: {error}");
+        if (Session.Channel.LastError is { } channelError)
+            ImGui.TextColored(Red, channelError);
 
         if (ImGui.Button("Log bones"))
             LogBones();
@@ -233,13 +204,51 @@ public class MainWindow : Window, IDisposable
             CopyPoseToTarget();
         if (debugMessage.Length > 0)
             ImGui.TextWrapped(debugMessage);
+
+        DrawChannelTest();
+    }
+
+    /// <summary>Measures what the sync service carries: publish a test tag of a given size and watch the partner's list.</summary>
+    private void DrawChannelTest()
+    {
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Channel test");
+        ImGui.TextColored(Grey, "Publish test tags of increasing size; your partner sees what arrives, and how late.");
+
+        var config = plugin.Configuration;
+        var size = config.TestTagKilobytes;
+        ImGui.SetNextItemWidth(100);
+        if (ImGui.InputInt("KB##TestSize", ref size) && size is >= 1 and <= 256)
+        {
+            config.TestTagKilobytes = size;
+            config.Save();
+        }
+        ImGui.SameLine();
+        using (ImRaii.Disabled(!plugin.Heels.Available))
+        {
+            if (ImGui.Button("Publish test tag"))
+                Session.Channel.PublishTestTag(config.TestTagKilobytes);
+            ImGui.SameLine();
+            if (ImGui.Button("Clear test tag"))
+                Session.Channel.ClearTestTag();
+        }
+
+        foreach (var receipt in Session.Channel.TestReceipts)
+        {
+            var latency = receipt.SentAtUnixMs is { } sent
+                ? $"{(receipt.ReceivedAt.ToUnixTimeMilliseconds() - sent) / 1000.0:0.0} s after sending (clocks may differ)"
+                : "unknown send time";
+            ImGui.TextUnformatted($"{receipt.ReceivedAt.ToLocalTime():HH:mm:ss}  {receipt.Owner.Name}: {receipt.Bytes / 1024.0:0.0} KB, {latency}");
+        }
     }
 
     private void LogBones()
     {
-        var keys = Session.Sync?.Participants.Select(p => p.Info.Actor).ToList() ?? [];
-        if (plugin.Registry.LocalKey is { } self && !keys.Contains(self))
-            keys.Insert(0, self);
+        var keys = new List<ActorKey>();
+        if (Session.Self is { } self)
+            keys.Add(self);
+        if (Session.Client.Session?.Partner is { } partner)
+            keys.Add(partner);
 
         var buffer = new PoseBuffer();
         var lines = keys.Select(key =>
@@ -260,7 +269,7 @@ public class MainWindow : Window, IDisposable
 
     private void CopyPoseToTarget()
     {
-        if (plugin.Registry.LocalKey is not { } self || !plugin.Registry.TryResolve(self, out var source))
+        if (Session.Self is not { } self || !plugin.Registry.TryResolve(self, out var source))
         {
             debugMessage = "Your character was not found in GPose.";
             return;
