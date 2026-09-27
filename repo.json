@@ -3,8 +3,8 @@
     "Author": "Rayla Petal",
     "Name": "CoPose",
     "InternalName": "CoPose",
-    "AssemblyVersion": "0.2.3.0",
-    "Description": "Shared-control GPose scenes for Ktisis. Pair with someone nearby through Player Sync or Lightless (via SimpleHeels tags);\r\nbone edits made by either player on either character reach the other about a second later. Requires Ktisis and SimpleHeels.",
+    "AssemblyVersion": "0.3.0.0",
+    "Description": "Shared-control GPose scenes for Ktisis. Pair with someone nearby through Player Sync or Lightless (via SimpleHeels tags);\r\nbone edits made by either player on either character show up live on both screens in GPose. Requires Ktisis and SimpleHeels.",
     "ApplicableVersion": "any",
     "Tags": [
       "gpose",
@@ -20,11 +20,11 @@
     "Punchline": "Pose together in GPose: either player can pose either character.",
     "AcceptsFeedback": true,
     "RepoUrl": "https://github.com/RaylaPetal/gpose-couple",
-    "DownloadLinkInstall": "https://github.com/RaylaPetal/gpose-couple/releases/download/v0.2.3/latest.zip",
-    "DownloadLinkTesting": "https://github.com/RaylaPetal/gpose-couple/releases/download/v0.2.3/latest.zip",
-    "DownloadLinkUpdate": "https://github.com/RaylaPetal/gpose-couple/releases/download/v0.2.3/latest.zip",
+    "DownloadLinkInstall": "https://github.com/RaylaPetal/gpose-couple/releases/download/v0.3.0/latest.zip",
+    "DownloadLinkTesting": "https://github.com/RaylaPetal/gpose-couple/releases/download/v0.3.0/latest.zip",
+    "DownloadLinkUpdate": "https://github.com/RaylaPetal/gpose-couple/releases/download/v0.3.0/latest.zip",
     "IsHide": false,
     "IsTestingExclusive": false,
-    "LastUpdate": 1790540718
+    "LastUpdate": 1790544638
   }
 ]
