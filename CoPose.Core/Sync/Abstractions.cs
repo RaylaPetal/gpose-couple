@@ -29,6 +29,12 @@ public readonly record struct BoneValue(string Name, BoneSample Value);
 /// </summary>
 public sealed class PoseBuffer
 {
+    /// <summary>
+    /// Pseudo-bone carrying the actor's world transform (the draw object's position, rotation and scale, which is
+    /// what Ktisis moves when the whole actor is dragged). It syncs like any other bone.
+    /// </summary>
+    public const string WorldBone = "@world";
+
     public string[] Names = [];
     public BoneSample[] Samples = [];
     public int Count;

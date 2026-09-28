@@ -4,7 +4,7 @@ Pose together in GPose. Pair up with someone nearby, and either of you can pose 
 Edits show up on your partner's screen live, while you're both in GPose. No codes, ports or VPNs: you pair through
 the Player Sync or Lightless connection you already have, and pose data goes through a small CoPose relay.
 
-> Syncs bone posing only. Moving characters' root positions, soft locks and per-partner permissions are not in this
+> Syncs bone posing and moving or rotating whole characters. Soft locks and per-partner permissions are not in this
 > version.
 
 ## Requirements (both players)

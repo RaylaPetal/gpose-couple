@@ -82,9 +82,54 @@ public sealed unsafe class HavokPoseReader(IObjectTable objects) : IPoseReader
             }
         }
 
+        if (count > 0)
+        {
+            var world = GetDrawObject(actor);
+            into.EnsureCapacity(count + 1);
+            into.Names[count] = PoseBuffer.WorldBone;
+            into.Samples[count] = new BoneSample(world->Position, world->Rotation, world->Scale);
+            count++;
+        }
+
         into.Count = count;
         into.LayoutId = layout.ToHashCode();
         return count > 0;
+    }
+
+    /// <summary>Sets the actor's world transform, as Ktisis does when the actor itself is moved.</summary>
+    public bool WriteWorld(ActorHandle actor, in BoneSample world)
+    {
+        var drawObject = GetDrawObject(actor);
+        if (drawObject == null)
+            return false;
+        drawObject->Position = world.Position;
+        drawObject->Rotation = Quaternion.Normalize(world.Rotation);
+        drawObject->Scale = world.Scale;
+        return true;
+    }
+
+    /// <summary>
+    /// Writes the body's root bone straight into model space. <c>ApplyAbsolutePoses</c> only rebuilds model space
+    /// for bones below the root, so a moved root would otherwise never show up.
+    /// </summary>
+    public bool WriteRoot(ActorHandle actor, IReadOnlyDictionary<string, BoneSample> bones)
+    {
+        var skeleton = GetSkeleton(actor);
+        if (skeleton == null || skeleton->PartialSkeletonCount == 0)
+            return false;
+        var pose = skeleton->PartialSkeletons[0].GetHavokPose(0);
+        if (pose == null || pose->Skeleton == null || pose->ModelPose.Data == null || pose->Skeleton->Bones.Length == 0)
+            return false;
+        var name = pose->Skeleton->Bones[0].Name.String;
+        if (name == null || !bones.TryGetValue(name, out var root))
+            return false;
+
+        var rotation = Quaternion.Normalize(root.Rotation);
+        ref var qs = ref pose->ModelPose.Data[0];
+        qs.Translation = new() { X = root.Position.X, Y = root.Position.Y, Z = root.Position.Z };
+        qs.Rotation = new() { X = rotation.X, Y = rotation.Y, Z = rotation.Z, W = rotation.W };
+        qs.Scale = new() { X = root.Scale.X, Y = root.Scale.Y, Z = root.Scale.Z };
+        return true;
     }
 
     private string[] GetNames(uint actor, int partial, uint resource, FFXIVClientStructs.Havok.Animation.Rig.hkaPose* pose)
@@ -103,6 +148,12 @@ public sealed unsafe class HavokPoseReader(IObjectTable objects) : IPoseReader
 
     private FFXIVClientStructs.FFXIV.Client.Graphics.Render.Skeleton* GetSkeleton(ActorHandle actor)
     {
+        var drawObject = GetDrawObject(actor);
+        return drawObject != null ? ((CharacterBase*)drawObject)->Skeleton : null;
+    }
+
+    private DrawObject* GetDrawObject(ActorHandle actor)
+    {
         if (actor.ObjectIndex >= objects.Length)
             return null;
         var address = objects.GetObjectAddress((int)actor.ObjectIndex);
@@ -114,7 +165,7 @@ public sealed unsafe class HavokPoseReader(IObjectTable objects) : IPoseReader
         if (drawObject == null || drawObject->Object.GetObjectType() != ObjectType.CharacterBase)
             return null;
 
-        return ((CharacterBase*)drawObject)->Skeleton;
+        return drawObject;
     }
 
     /// <summary>Drops cached bone names, e.g. when leaving GPose (object indices get reused).</summary>

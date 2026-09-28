@@ -15,8 +15,12 @@ namespace CoPose.Interop;
 /// therefore sends the actor's full current pose (as read by <see cref="HavokPoseReader"/>) with the received
 /// bones overriding it.
 /// </para>
+/// <para>
+/// Two things <c>ApplyAbsolutePoses</c> does not cover are written directly: the actor's world transform
+/// (<see cref="PoseBuffer.WorldBone"/>) and the body's root bone, whose model space Ktisis never rebuilds.
+/// </para>
 /// </summary>
-public sealed class KtisisIpcPoseWriter(KtisisIpc ktisis, IPoseReader reader) : IPoseWriter
+public sealed class KtisisIpcPoseWriter(KtisisIpc ktisis, HavokPoseReader reader) : IPoseWriter
 {
     private readonly PoseBuffer current = new();
 
@@ -25,12 +29,33 @@ public sealed class KtisisIpcPoseWriter(KtisisIpc ktisis, IPoseReader reader) : 
         if (!ktisis.Available || !reader.TryRead(actor, current))
             return Task.FromResult(false);
 
-        var matrices = new Dictionary<string, Matrix4x4>(current.Count, StringComparer.Ordinal);
+        var samples = new Dictionary<string, BoneSample>(current.Count, StringComparer.Ordinal);
         for (var i = 0; i < current.Count; i++)
-            matrices[current.Names[i]] = Compose(current.Samples[i]);
-        foreach (var bone in bones)
-            matrices[bone.Name] = Compose(bone.Value);
+            samples[current.Names[i]] = current.Samples[i];
 
+        var posesBones = false;
+        foreach (var bone in bones)
+        {
+            if (bone.Name == PoseBuffer.WorldBone)
+            {
+                if (!reader.WriteWorld(actor, bone.Value))
+                    return Task.FromResult(false);
+                continue;
+            }
+            samples[bone.Name] = bone.Value;
+            posesBones = true;
+        }
+
+        if (!posesBones)
+            return Task.FromResult(true);
+
+        // Before the IPC call: it rebuilds the rest of the body from the root's model transform.
+        reader.WriteRoot(actor, samples);
+
+        samples.Remove(PoseBuffer.WorldBone);
+        var matrices = new Dictionary<string, Matrix4x4>(samples.Count, StringComparer.Ordinal);
+        foreach (var (name, sample) in samples)
+            matrices[name] = Compose(sample);
         return ktisis.ApplyAbsolutePoses(actor.ObjectIndex, matrices);
     }
 

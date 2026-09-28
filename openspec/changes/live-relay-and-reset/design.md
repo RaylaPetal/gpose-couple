@@ -17,7 +17,7 @@ See proposal.md for why. Relevant facts:
 
 **Non-Goals:**
 - Replacing SimpleHeels-based discovery and pairing (it works outside GPose and gives trust via sync-service pairing).
-- More than two players per room; root/world transforms; permissions.
+- More than two players per room; permissions.
 - End-to-end encryption of pose data. Room ids are secret, and the relay is the owner's; see Risks.
 
 ## Decisions
@@ -102,3 +102,14 @@ Rollback: players reinstall 0.2.2 from its release, and the Worker can be delete
 ## Open Questions
 
 - The exact `workers.dev` subdomain of the account. It's known after the first deploy and doesn't affect the design.
+
+## Addendum (0.3.1, from the first two-player test)
+
+The partner saw the pose applied but the characters sat at different heights and looked twisted. Two gaps:
+
+- **World transform.** Ktisis moves a whole actor by writing the draw object's position, rotation and scale, which
+  are not bones. CoPose now syncs them as the pseudo-bone `@world` (`PoseBuffer.WorldBone`) through the same LWW
+  registers, and the writer sets the draw object directly.
+- **Root bone.** `HavokPosing.SyncModelSpace` starts at bone 1, so `ApplyAbsolutePoses` never rebuilds the root
+  bone's model transform and a moved `n_root` was lost. The writer now writes the root into model space before the
+  IPC call, which then rebuilds the rest of the body from it.
